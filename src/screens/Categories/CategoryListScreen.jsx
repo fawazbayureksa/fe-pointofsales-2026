@@ -19,7 +19,7 @@ import {
   useTheme,
   Divider,
 } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCategoryList, useDeleteCategory } from '../../hooks/useCategories';
 
 const DEBOUNCE_MS = 400;

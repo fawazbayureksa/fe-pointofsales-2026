@@ -14,7 +14,7 @@ import {
   Snackbar,
   useTheme,
 } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getMe, updateProfile, changePassword } from '../../api/auth';
 import useAuth from '../../hooks/useAuth';

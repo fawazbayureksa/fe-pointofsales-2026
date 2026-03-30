@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   useTheme,
 } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import { useOrder } from '../../hooks/useOrders';
 import { formatCurrency } from '../../utils/currency';

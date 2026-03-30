@@ -20,7 +20,7 @@ import {
   IconButton,
   useTheme,
 } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useProductList, useDeleteProduct } from '../../hooks/useProducts';
 import { getCategories } from '../../api/products';

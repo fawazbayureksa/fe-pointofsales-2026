@@ -20,7 +20,7 @@ import {
   ActivityIndicator,
   Divider,
 } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useProductList } from '../../hooks/useProducts';
 import { useAllCategories } from '../../hooks/useCategories';
 import { useCreateOrder } from '../../hooks/useOrders';
