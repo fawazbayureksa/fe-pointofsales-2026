@@ -4,6 +4,7 @@ import {
   FlatList,
   StyleSheet,
   TouchableOpacity,
+  RefreshControl,
 } from 'react-native';
 import {
   Text,
@@ -32,7 +33,7 @@ export default function CategoryListScreen({ navigation }) {
   const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
 
   // ── Data ────────────────────────────────────────────────────────────────────
-  const { data, isLoading, isError, refetch } = useCategoryList(
+  const { data, isLoading, isError, refetch, isFetching } = useCategoryList(
     appliedSearch ? { search: appliedSearch } : {},
   );
   const categories = Array.isArray(data) ? data : (data?.data ?? []);
@@ -152,6 +153,14 @@ export default function CategoryListScreen({ navigation }) {
         ListEmptyComponent={ListEmpty}
         contentContainerStyle={categories.length === 0 && styles.emptyContainer}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={isFetching && !isLoading}
+            onRefresh={refetch}
+            colors={[theme.colors.primary]}
+            tintColor={theme.colors.primary}
+          />
+        }
       />
 
       {/* ── FAB ──────────────────────────────────────────────────────────────── */}
@@ -236,8 +245,8 @@ const styles = StyleSheet.create({
     gap: 6,
     alignItems: 'center',
   },
-  countChip: { height: 24 },
-  inactiveChip: { height: 24, backgroundColor: '#F5F5F5' },
+  countChip: {},
+  inactiveChip: { backgroundColor: '#F5F5F5' },
   fab: {
     position: 'absolute',
     right: 20,
