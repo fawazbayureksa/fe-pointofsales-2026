@@ -145,7 +145,6 @@ export default function POSScreen({ navigation }) {
 
   const handleAddProduct = useCallback((product) => {
     addItem(product);
-    setPanel('cart');
     setSnackbar({ visible: true, message: `${product.name} added to cart.` });
   }, [addItem]);
 
@@ -186,6 +185,19 @@ export default function POSScreen({ navigation }) {
 
   const ProductPanel = (
     <View style={styles.flex}>
+      {itemCount > 0 && (
+        <TouchableOpacity
+          style={styles.viewCartBtn}
+          onPress={() => setPanel('cart')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.viewCartText}>View Cart</Text>
+          <View style={styles.viewCartBadge}>
+            <Text style={styles.viewCartBadgeText}>{itemCount}</Text>
+          </View>
+          <Text style={styles.viewCartTotal}>{formatCurrency(subtotal)}</Text>
+        </TouchableOpacity>
+      )}
       <Searchbar
         placeholder="Search products…"
         value={search}
@@ -343,9 +355,7 @@ export default function POSScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {panel === 'products'
-        ? <React.Fragment key="products">{ProductPanel}</React.Fragment>
-        : <React.Fragment key="cart">{CartPanel}</React.Fragment>}
+      {panel === 'products' ? ProductPanel : CartPanel}
 
       <PaymentSheet
         visible={!!paymentOrder}
@@ -435,4 +445,25 @@ const styles = StyleSheet.create({
   placeOrderContent: { paddingVertical: 6 },
   center: { alignItems: 'center', justifyContent: 'center', paddingTop: 48 },
   emptyText: { color: '#888', fontSize: 15, marginTop: 8 },
+  viewCartBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#213448',
+    marginHorizontal: 10,
+    marginTop: 6,
+    marginBottom: 2,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    gap: 8,
+  },
+  viewCartText: { flex: 1, color: '#fff', fontWeight: '700', fontSize: 14 },
+  viewCartBadge: {
+    backgroundColor: '#94B4C1',
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 1,
+  },
+  viewCartBadgeText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  viewCartTotal: { color: '#ECEFCA', fontWeight: '700', fontSize: 14 },
 });
