@@ -9,8 +9,8 @@ import {
 import { TextInput, Button, Text, Snackbar, Surface } from 'react-native-paper';
 import useAuth from '../../hooks/useAuth';
 
-const PRIMARY = '#5B39C0';
-const PRIMARY_DARK = '#3E2490';
+const PRIMARY = '#213448';
+const PRIMARY_DARK = '#0F1E2E';
 
 export default function LoginScreen() {
   const { login, isLoading } = useAuth();
@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
   btn: {
     marginTop: 28,
     borderRadius: 14,
-    backgroundColor: PRIMARY,
+    backgroundColor: '#547792',
     shadowColor: PRIMARY_DARK,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,

@@ -45,7 +45,8 @@ function AppTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarActiveTintColor: '#6200ee',
+        tabBarActiveTintColor: '#547792',
+        tabBarInactiveTintColor: '#94B4C1',
       }}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />

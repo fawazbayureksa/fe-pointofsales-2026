@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   name: { flex: 1, fontWeight: '700', marginRight: 8 },
-  price: { color: '#6200ee', fontWeight: '800', marginBottom: 8 },
+  price: { color: '#213448', fontWeight: '800', marginBottom: 8 },
   description: { color: '#555', marginTop: 4 },
   sectionTitle: { fontWeight: '700', marginBottom: 4 },
   divider: { marginBottom: 12 },

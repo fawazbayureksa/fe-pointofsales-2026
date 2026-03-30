@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
   thumbIcon: { fontSize: 26 },
   info: { flex: 1, gap: 2 },
   meta: { color: '#888' },
-  price: { fontWeight: '700', color: '#6200ee' },
+  price: { fontWeight: '700', color: '#213448' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40 },
   empty: { color: '#999' },
   fab: { position: 'absolute', right: 16, bottom: 24 },
