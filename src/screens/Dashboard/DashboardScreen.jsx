@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   Divider,
 } from 'react-native-paper';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { BarChart } from 'react-native-chart-kit';
 import { useDashboard } from '../../hooks/useDashboard';
 import { useQueryClient } from '@tanstack/react-query';
@@ -59,10 +60,25 @@ function StatusBadge({ status }) {
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
+// ─── Summary card icons ─────────────────────────────────────────────────────
+const CARD_ICONS = {
+  "Today's Sales":    'cash-register',
+  'Monthly Revenue':  'chart-line',
+  'Orders Today':     'clipboard-list-outline',
+  'Avg Order Value':  'chart-bar',
+};
+
 function SummaryCard({ label, value, sub, growth }) {
   const theme = useTheme();
+  const icon = CARD_ICONS[label] ?? 'information-outline';
   return (
     <Surface style={styles.summaryCard} elevation={1}>
+      <View style={styles.cardHeader}>
+        <View style={styles.cardIconWrap}>
+          <MaterialCommunityIcons name={icon} size={18} color={theme.colors.primary} />
+        </View>
+        {growth != null && <GrowthBadge value={growth} />}
+      </View>
       <Text variant="labelSmall" style={styles.cardLabel}>{label}</Text>
       <Text variant="titleMedium" style={[styles.cardValue, { color: theme.colors.secondary }]}
         numberOfLines={1} adjustsFontSizeToFit>
@@ -70,7 +86,6 @@ function SummaryCard({ label, value, sub, growth }) {
       </Text>
       <View style={styles.cardFooter}>
         {sub ? <Text variant="labelSmall" style={styles.cardSub}>{sub}</Text> : <View />}
-        {growth != null && <GrowthBadge value={growth} />}
       </View>
     </Surface>
   );
@@ -168,11 +183,13 @@ export default function DashboardScreen({ navigation }) {
       }
     >
       {/* ── Header ─────────────────────────────────────────────────── */}
-      <View style={[styles.header, { backgroundColor: theme.colors.secondary }]}>
-        <Text variant="titleLarge" style={styles.headerTitle}>Dashboard</Text>
-        <Text variant="bodySmall" style={styles.headerSub}>
-          {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}
-        </Text>
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text variant="titleMedium" style={styles.headerGreeting}>Overview</Text>
+          <Text variant="bodySmall" style={styles.headerDate}>
+            {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </Text>
+        </View>
       </View>
 
       {/* ── Section 1: Summary Cards ───────────────────────────────── */}
@@ -357,7 +374,11 @@ export default function DashboardScreen({ navigation }) {
                   elevation={1}
                 >
                   <View style={[styles.stockIcon, { backgroundColor: empty ? '#FFEBEE' : '#FFF3E0' }]}>
-                    <Text style={{ fontSize: 18 }}>{empty ? '\u26a0\ufe0f' : '\u{1F4E6}'}</Text>
+                    <MaterialCommunityIcons
+                      name={empty ? 'alert-outline' : 'package-variant'}
+                      size={18}
+                      color={empty ? '#C62828' : '#E65100'}
+                    />
                   </View>
                   <View style={styles.stockInfo}>
                     <Text variant="bodyMedium" style={{ fontWeight: '600' }} numberOfLines={1}>
@@ -422,12 +443,16 @@ const styles = StyleSheet.create({
 
   // Header
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 20,
+    paddingTop: 14,
+    paddingBottom: 6,
   },
-  headerTitle: { color: '#fff', fontWeight: '800' },
-  headerSub: { color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  headerLeft: { flex: 1 },
+  headerGreeting: { fontWeight: '700', color: '#213448' },
+  headerDate: { color: '#94B4C1', marginTop: 2 },
 
   // Summary
   summaryGrid: {
@@ -443,6 +468,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     backgroundColor: '#fff',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  cardIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#EDF3F7',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cardLabel: { color: '#888', marginBottom: 4, fontSize: 11 },
   cardValue: { fontWeight: '700', fontSize: 15 },

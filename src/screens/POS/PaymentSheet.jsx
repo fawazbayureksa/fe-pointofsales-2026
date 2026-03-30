@@ -16,14 +16,15 @@ import {
   Snackbar,
   useTheme,
 } from 'react-native-paper';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { usePayOrder } from '../../hooks/useOrders';
 import { formatCurrency } from '../../utils/currency';
 
 const METHODS = [
-  { key: 'cash',     label: 'Cash',     icon: '💵' },
-  { key: 'card',     label: 'Card',     icon: '💳' },
-  { key: 'qris',     label: 'QRIS',     icon: '📱' },
-  { key: 'transfer', label: 'Transfer', icon: '🏦' },
+  { key: 'cash',     label: 'Cash',     icon: 'cash' },
+  { key: 'card',     label: 'Card',     icon: 'credit-card-outline' },
+  { key: 'qris',     label: 'QRIS',     icon: 'qrcode-scan' },
+  { key: 'transfer', label: 'Transfer', icon: 'bank-outline' },
 ];
 
 /**
@@ -136,7 +137,11 @@ export default function PaymentSheet({ visible, order, onDismiss, onSuccess }) {
                   onPress={() => setMethod(m.key)}
                   activeOpacity={0.75}
                 >
-                  <Text style={styles.methodIcon}>{m.icon}</Text>
+                  <MaterialCommunityIcons
+                    name={m.icon}
+                    size={24}
+                    color={method === m.key ? theme.colors.primary : '#777'}
+                  />
                   <Text
                     style={[
                       styles.methodLabel,
@@ -288,7 +293,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
     gap: 4,
   },
-  methodIcon: { fontSize: 22 },
   methodLabel: { fontSize: 12, fontWeight: '500', color: '#444' },
   input: { marginBottom: 12 },
   changeBox: {

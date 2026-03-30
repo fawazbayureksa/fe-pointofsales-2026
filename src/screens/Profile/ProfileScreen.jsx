@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import {
   Text,
   Button,
@@ -14,6 +14,7 @@ import {
   Snackbar,
   useTheme,
 } from 'react-native-paper';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getMe, updateProfile, changePassword } from '../../api/auth';
 import useAuth from '../../hooks/useAuth';
@@ -42,6 +43,45 @@ function fieldLabel(key) {
 
 // ─── Change Password field order ──────────────────────────────────────────────
 const PW_FIELDS = ['current_password', 'password', 'password_confirmation'];
+
+function TouchableListItem({ icon, label, onPress, color, loading }) {
+  const tint = color ?? '#213448';
+  return (
+    <TouchableOpacity style={pStyles.listItem} onPress={onPress} activeOpacity={0.6} disabled={loading}>
+      <View style={[pStyles.listIconWrap, { backgroundColor: color ? '#FFEBEE' : '#EDF3F7' }]}>
+        <MaterialCommunityIcons name={icon} size={20} color={tint} />
+      </View>
+      <Text style={[pStyles.listLabel, { color: tint }]}>{label}</Text>
+      {loading ? (
+        <ActivityIndicator size={18} color={tint} />
+      ) : (
+        <MaterialCommunityIcons name="chevron-right" size={20} color="#C0C0C0" />
+      )}
+    </TouchableOpacity>
+  );
+}
+
+const pStyles = StyleSheet.create({
+  listItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  listIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listLabel: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+});
 
 export default function ProfileScreen() {
   const theme = useTheme();
@@ -169,35 +209,29 @@ export default function ProfileScreen() {
       <Divider style={styles.divider} />
 
       {/* ── Actions ────────────────────────────────────────────────────────────── */}
-      <Button
-        mode="outlined"
-        icon="account-edit"
-        onPress={openEditModal}
-        style={styles.actionBtn}
-      >
-        Edit Profile
-      </Button>
+      <Text variant="labelMedium" style={styles.sectionLabel}>Account</Text>
 
-      <Button
-        mode="outlined"
-        icon="lock-reset"
-        onPress={openPwModal}
-        style={styles.actionBtn}
-      >
-        Change Password
-      </Button>
-
-      <Button
-        mode="contained"
-        icon="logout"
-        buttonColor={theme.colors.error}
-        onPress={logout}
-        loading={isLoggingOut}
-        disabled={isLoggingOut}
-        style={styles.actionBtn}
-      >
-        Logout
-      </Button>
+      <Card style={styles.actionCard} elevation={1}>
+        <TouchableListItem
+          icon="account-edit-outline"
+          label="Edit Profile"
+          onPress={openEditModal}
+        />
+        <Divider style={styles.listDivider} />
+        <TouchableListItem
+          icon="lock-outline"
+          label="Change Password"
+          onPress={openPwModal}
+        />
+        <Divider style={styles.listDivider} />
+        <TouchableListItem
+          icon="logout"
+          label="Logout"
+          onPress={logout}
+          color={theme.colors.error}
+          loading={isLoggingOut}
+        />
+      </Card>
 
       {/* ── Edit Profile Modal ──────────────────────────────────────────────────── */}
       <Portal>
@@ -367,9 +401,21 @@ const styles = StyleSheet.create({
   divider: {
     marginVertical: 16,
   },
-  actionBtn: {
-    marginBottom: 12,
-    borderRadius: 8,
+  sectionLabel: {
+    color: '#94B4C1',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+    marginLeft: 4,
+  },
+  actionCard: {
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  listDivider: {
+    marginLeft: 62,
   },
   // Modal
   modal: {

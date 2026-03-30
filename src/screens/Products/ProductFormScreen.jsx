@@ -299,7 +299,7 @@ export default function ProductFormScreen({ route, navigation }) {
         }}
       />
 
-      {/* ── Barcode scanner modal ─────────────────────────────────────────────── */}}
+      {/* ── Barcode scanner modal ─────────────────────────────────────────────── */}
       <RNModal
         visible={scannerVisible}
         animationType="slide"

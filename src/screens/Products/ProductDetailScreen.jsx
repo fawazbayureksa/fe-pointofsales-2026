@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   useTheme,
 } from 'react-native-paper';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useProduct } from '../../hooks/useProducts';
 import { formatCurrency } from '../../utils/currency';
 import { resolveImageUrl } from '../../utils/image';
@@ -55,7 +56,7 @@ export default function ProductDetailScreen({ route, navigation }) {
         <Image source={{ uri: resolveImageUrl(product.image) }} style={styles.hero} />
       ) : (
         <View style={styles.heroPlaceholder}>
-          <Text style={styles.heroIcon}>📦</Text>
+          <MaterialCommunityIcons name="package-variant-closed" size={64} color="#94B4C1" />
         </View>
       )}
 
@@ -138,12 +139,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 160,
     borderRadius: 12,
-    backgroundColor: '#F3E5F5',
+    backgroundColor: '#EDF3F7',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
   },
-  heroIcon: { fontSize: 64 },
   card: { marginBottom: 12, borderRadius: 12 },
   titleRow: {
     flexDirection: 'row',

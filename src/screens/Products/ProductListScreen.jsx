@@ -20,6 +20,7 @@ import {
   IconButton,
   useTheme,
 } from 'react-native-paper';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useQuery } from '@tanstack/react-query';
 import { useProductList, useDeleteProduct } from '../../hooks/useProducts';
 import { getCategories } from '../../api/products';
@@ -57,7 +58,7 @@ function ProductRow({ item, onPress, onDelete }) {
           <Image source={{ uri: resolveImageUrl(item.image) }} style={styles.thumb} />
         ) : (
           <View style={styles.thumbPlaceholder}>
-            <Text style={styles.thumbIcon}>📦</Text>
+            <MaterialCommunityIcons name="package-variant" size={26} color="#94B4C1" />
           </View>
         )}
 
@@ -303,11 +304,10 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 8,
-    backgroundColor: '#F3E5F5',
+    backgroundColor: '#EDF3F7',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  thumbIcon: { fontSize: 26 },
   info: { flex: 1, gap: 2 },
   meta: { color: '#888' },
   price: { fontWeight: '700', color: '#213448' },
