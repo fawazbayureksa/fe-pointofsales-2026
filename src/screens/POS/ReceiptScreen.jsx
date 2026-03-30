@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   useTheme,
 } from 'react-native-paper';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import * as Print from 'expo-print';
 import { useOrder } from '../../hooks/useOrders';
 import { formatCurrency } from '../../utils/currency';
@@ -119,7 +120,10 @@ export default function ReceiptScreen({ route, navigation }) {
       <ScrollView contentContainerStyle={styles.container}>
         {/* Header */}
         <View style={[styles.header, { backgroundColor: '#213448' }]}>
-          <Text variant="headlineSmall" style={styles.headerTitle}>Receipt</Text>
+          <View style={styles.successCircle}>
+            <MaterialCommunityIcons name="check" size={28} color="#fff" />
+          </View>
+          <Text variant="headlineSmall" style={styles.headerTitle}>Payment Complete</Text>
           <Text variant="bodyMedium" style={styles.headerSub}>
             #{order.order_number}
           </Text>
@@ -270,6 +274,15 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     gap: 4,
+  },
+  successCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#2E7D32',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
   headerTitle: { color: '#fff', fontWeight: '800' },
   headerSub: { color: 'rgba(255,255,255,0.75)' },

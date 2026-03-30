@@ -7,7 +7,6 @@ import {
   Image,
   ScrollView,
   RefreshControl,
-  Platform,
 } from 'react-native';
 import {
   Text,
@@ -397,7 +396,6 @@ const styles = StyleSheet.create({
   segmentBar: {
     flexDirection: 'row',
     height: 46,
-    paddingTop: Platform.OS === 'ios' ? 0 : 0,
   },
   segment: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   segmentActive: { borderBottomWidth: 3, borderBottomColor: '#94B4C1' },
