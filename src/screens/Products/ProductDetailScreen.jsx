@@ -11,6 +11,7 @@ import {
 } from 'react-native-paper';
 import { useProduct } from '../../hooks/useProducts';
 import { formatCurrency } from '../../utils/currency';
+import { resolveImageUrl } from '../../utils/image';
 
 function DetailRow({ label, value }) {
   if (value === null || value === undefined || value === '') return null;
@@ -51,7 +52,7 @@ export default function ProductDetailScreen({ route, navigation }) {
     <ScrollView contentContainerStyle={styles.container}>
       {/* ── Hero image ────────────────────────────────────────────────────────── */}
       {product.image ? (
-        <Image source={{ uri: product.image }} style={styles.hero} />
+        <Image source={{ uri: resolveImageUrl(product.image) }} style={styles.hero} />
       ) : (
         <View style={styles.heroPlaceholder}>
           <Text style={styles.heroIcon}>📦</Text>

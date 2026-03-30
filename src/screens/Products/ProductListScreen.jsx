@@ -24,6 +24,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useProductList, useDeleteProduct } from '../../hooks/useProducts';
 import { getCategories } from '../../api/products';
 import { formatCurrency } from '../../utils/currency';
+import { resolveImageUrl } from '../../utils/image';
 
 /** Flatten pages into a single array */
 function flattenPages(data) {
@@ -53,7 +54,7 @@ function ProductRow({ item, onPress, onDelete }) {
     <Card style={styles.card} onPress={() => onPress(item)} elevation={1}>
       <Card.Content style={styles.row}>
         {item.image ? (
-          <Image source={{ uri: item.image }} style={styles.thumb} />
+          <Image source={{ uri: resolveImageUrl(item.image) }} style={styles.thumb} />
         ) : (
           <View style={styles.thumbPlaceholder}>
             <Text style={styles.thumbIcon}>📦</Text>
