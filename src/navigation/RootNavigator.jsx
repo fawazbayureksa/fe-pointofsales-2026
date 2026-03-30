@@ -1,6 +1,8 @@
 import React from 'react';
+import { Platform, View, StyleSheet } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import useAuthStore from '../store/authStore';
 
 // Screens
@@ -20,10 +22,40 @@ import CategoryFormScreen from '../screens/Categories/CategoryFormScreen';
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
+// ── Shared header theme ──────────────────────────────────────────────────────
+const HEADER_BG = '#213448';
+const HEADER_TINT = '#FFFFFF';
+
+const sharedStackOptions = {
+  headerStyle: {
+    backgroundColor: HEADER_BG,
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  headerTintColor: HEADER_TINT,
+  headerTitleStyle: {
+    fontWeight: '600',
+    fontSize: 17,
+    letterSpacing: 0.3,
+  },
+  headerBackTitleVisible: false,
+  cardStyle: { backgroundColor: '#F4F6F8' },
+};
+
+// ── Tab icon map ─────────────────────────────────────────────────────────────
+const TAB_ICONS = {
+  Dashboard:  { active: 'view-dashboard',        inactive: 'view-dashboard-outline' },
+  POS:        { active: 'store',                  inactive: 'store-outline' },
+  Products:   { active: 'package-variant-closed',         inactive: 'package-variant' },
+  Categories: { active: 'shape',                  inactive: 'shape-outline' },
+  Orders:     { active: 'receipt',                inactive: 'text-box-outline' },
+  Profile:    { active: 'account-circle',         inactive: 'account-circle-outline' },
+};
+
 /** Nested stack for the POS tab */
 function POSStack() {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator screenOptions={sharedStackOptions}>
       <Stack.Screen
         name="POSMain"
         component={POSScreen}
@@ -46,7 +78,7 @@ function POSStack() {
 /** Nested stack for the Orders tab */
 function OrdersStack() {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator screenOptions={sharedStackOptions}>
       <Stack.Screen
         name="OrderList"
         component={OrdersScreen}
@@ -64,7 +96,7 @@ function OrdersStack() {
 /** Nested stack for the Products tab */
 function ProductsStack() {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator screenOptions={sharedStackOptions}>
       <Stack.Screen
         name="ProductList"
         component={ProductListScreen}
@@ -89,7 +121,7 @@ function ProductsStack() {
 /** Nested stack for the Categories tab */
 function CategoriesStack() {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator screenOptions={sharedStackOptions}>
       <Stack.Screen
         name="CategoryList"
         component={CategoryListScreen}
@@ -109,12 +141,48 @@ function CategoriesStack() {
 function AppTabs() {
   return (
     <Tab.Navigator
-      screenOptions={{
+      screenOptions={({ route }) => ({
         tabBarActiveTintColor: '#547792',
         tabBarInactiveTintColor: '#94B4C1',
-      }}
+        tabBarIcon: ({ focused, color, size }) => {
+          const icons = TAB_ICONS[route.name] ?? { active: 'circle', inactive: 'circle-outline' };
+          return (
+            <MaterialCommunityIcons
+              name={focused ? icons.active : icons.inactive}
+              size={focused ? 26 : 23}
+              color={color}
+            />
+          );
+        },
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: '600',
+          letterSpacing: 0.2,
+          marginTop: -2,
+        },
+        tabBarStyle: {
+          backgroundColor: '#FFFFFF',
+          borderTopWidth: 0,
+          elevation: 12,
+          shadowColor: '#213448',
+          shadowOffset: { width: 0, height: -3 },
+          shadowOpacity: 0.08,
+          shadowRadius: 8,
+          height: Platform.OS === 'ios' ? 84 : 62,
+          paddingTop: 4,
+          paddingBottom: Platform.OS === 'ios' ? 24 : 6,
+        },
+      })}
     >
-      <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen
+        name="Dashboard"
+        component={DashboardScreen}
+        options={{
+          ...sharedStackOptions,
+          headerShown: true,
+          title: 'Dashboard',
+        }}
+      />
       <Tab.Screen
         name="POS"
         component={POSStack}
@@ -138,7 +206,11 @@ function AppTabs() {
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
-        options={{ headerShown: true, title: 'My Profile' }}
+        options={{
+          ...sharedStackOptions,
+          headerShown: true,
+          title: 'My Profile',
+        }}
       />
     </Tab.Navigator>
   );

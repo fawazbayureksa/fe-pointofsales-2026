@@ -7,6 +7,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { TextInput, Button, Text, Snackbar, Surface } from 'react-native-paper';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import useAuth from '../../hooks/useAuth';
 
 const PRIMARY = '#213448';
@@ -54,7 +55,7 @@ export default function LoginScreen() {
         {/* ── Brand header ───────────────────────────────────────────────────── */}
         <View style={styles.brand}>
           <View style={styles.logoWrap}>
-            <Text style={styles.logoEmoji}>🏪</Text>
+            <MaterialCommunityIcons name="store" size={42} color="#fff" />
           </View>
           <Text style={styles.appName}>POS 2026</Text>
           <Text style={styles.tagline}>Point of Sales Management</Text>
@@ -160,7 +161,9 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -169,9 +172,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 6,
-  },
-  logoEmoji: {
-    fontSize: 44,
   },
   appName: {
     fontSize: 34,

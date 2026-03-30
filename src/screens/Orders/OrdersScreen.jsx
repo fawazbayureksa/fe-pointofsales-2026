@@ -14,6 +14,7 @@ import {
   useTheme,
   Button,
 } from 'react-native-paper';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useOrderList } from '../../hooks/useOrders';
 import { formatCurrency } from '../../utils/currency';
 import { formatDate } from '../../utils/date';
@@ -147,6 +148,7 @@ export default function OrdersScreen({ navigation }) {
         </View>
       ) : isError ? (
         <View style={styles.center}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={40} color="#C62828" />
           <Text style={styles.errorText}>Failed to load orders.</Text>
           <Button onPress={refetch} style={{ marginTop: 8 }}>Retry</Button>
         </View>
@@ -173,6 +175,7 @@ export default function OrdersScreen({ navigation }) {
           }
           ListEmptyComponent={
             <View style={styles.center}>
+              <MaterialCommunityIcons name="text-box-remove-outline" size={40} color="#94B4C1" />
               <Text style={styles.emptyText}>No orders found.</Text>
             </View>
           }

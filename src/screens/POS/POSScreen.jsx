@@ -7,6 +7,7 @@ import {
   Image,
   ScrollView,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import {
   Text,
@@ -20,6 +21,7 @@ import {
   ActivityIndicator,
   Divider,
 } from 'react-native-paper';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useProductList } from '../../hooks/useProducts';
 import { useAllCategories } from '../../hooks/useCategories';
 import { useCreateOrder } from '../../hooks/useOrders';
@@ -39,7 +41,7 @@ function ProductCard({ product, onAdd }) {
         <Image source={{ uri: imgUri }} style={styles.cardImage} resizeMode="cover" />
       ) : (
         <View style={[styles.cardImage, styles.cardImagePlaceholder]}>
-          <Text style={{ fontSize: 28 }}>📦</Text>
+          <MaterialCommunityIcons name="package-variant" size={28} color="#94B4C1" />
         </View>
       )}
       <View style={styles.cardBody}>
@@ -191,6 +193,7 @@ export default function POSScreen({ navigation }) {
           onPress={() => setPanel('cart')}
           activeOpacity={0.85}
         >
+          <MaterialCommunityIcons name="cart" size={18} color="#fff" style={{ marginRight: 6 }} />
           <Text style={styles.viewCartText}>View Cart</Text>
           <View style={styles.viewCartBadge}>
             <Text style={styles.viewCartBadgeText}>{itemCount}</Text>
@@ -274,7 +277,7 @@ export default function POSScreen({ navigation }) {
     <View style={styles.flex}>
       {items.length === 0 ? (
         <View style={[styles.center, styles.flex]}>
-          <Text style={{ fontSize: 40 }}>🛒</Text>
+          <MaterialCommunityIcons name="cart-outline" size={48} color="#94B4C1" />
           <Text style={styles.emptyText}>Cart is empty</Text>
           <Button mode="outlined" onPress={() => setPanel('products')} style={{ marginTop: 12 }}>
             Browse Products
@@ -334,6 +337,12 @@ export default function POSScreen({ navigation }) {
           style={[styles.segment, panel === 'products' && styles.segmentActive]}
           onPress={() => setPanel('products')}
         >
+          <MaterialCommunityIcons
+            name="view-grid-outline"
+            size={18}
+            color={panel === 'products' ? '#FFFFFF' : 'rgba(255,255,255,0.55)'}
+            style={{ marginRight: 6 }}
+          />
           <Text style={[styles.segmentText, panel === 'products' && styles.segmentTextActive]}>
             Products
           </Text>
@@ -343,6 +352,12 @@ export default function POSScreen({ navigation }) {
           onPress={() => setPanel('cart')}
         >
           <View style={styles.cartTabInner}>
+            <MaterialCommunityIcons
+              name="cart-outline"
+              size={18}
+              color={panel === 'cart' ? '#FFFFFF' : 'rgba(255,255,255,0.55)'}
+              style={{ marginRight: 6 }}
+            />
             <Text style={[styles.segmentText, panel === 'cart' && styles.segmentTextActive]}>
               Cart
             </Text>
@@ -379,8 +394,12 @@ const CARD_GAP = 8;
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  segmentBar: { flexDirection: 'row', height: 46 },
-  segment: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  segmentBar: {
+    flexDirection: 'row',
+    height: 46,
+    paddingTop: Platform.OS === 'ios' ? 0 : 0,
+  },
+  segment: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   segmentActive: { borderBottomWidth: 3, borderBottomColor: '#94B4C1' },
   segmentText: { color: 'rgba(255,255,255,0.65)', fontWeight: '600', fontSize: 14 },
   segmentTextActive: { color: '#FFFFFF' },
