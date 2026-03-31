@@ -33,7 +33,7 @@ function flattenPages(data) {
 }
 
 function StockBadge({ stock, trackStock }) {
-  if (!trackStock) return null;
+  if (!trackStock || stock == null) return null;
   const low = stock <= 0;
   return (
     <Chip
@@ -74,7 +74,7 @@ function ProductRow({ item, onPress, onDelete }) {
           <Text variant="bodyMedium" style={styles.price}>
             {formatCurrency(parseFloat(item.price))}
           </Text>
-          <StockBadge stock={item.stock ?? 0} trackStock={item.track_stock} />
+          <StockBadge stock={item.stock} trackStock={item.track_stock} />
         </View>
 
         <IconButton
