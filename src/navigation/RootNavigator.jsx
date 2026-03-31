@@ -46,8 +46,6 @@ const sharedStackOptions = {
 const TAB_ICONS = {
   Dashboard:  { active: 'view-dashboard',        inactive: 'view-dashboard-outline' },
   POS:        { active: 'store',                  inactive: 'store-outline' },
-  Products:   { active: 'package-variant-closed',         inactive: 'package-variant' },
-  Categories: { active: 'shape',                  inactive: 'shape-outline' },
   Orders:     { active: 'receipt',                inactive: 'text-box-outline' },
   Profile:    { active: 'account-circle',         inactive: 'account-circle-outline' },
 };
@@ -93,10 +91,16 @@ function OrdersStack() {
   );
 }
 
-/** Nested stack for the Products tab */
-function ProductsStack() {
+/** Profile tab stack — includes Products & Categories management screens */
+function ProfileStack() {
   return (
     <Stack.Navigator screenOptions={sharedStackOptions}>
+      <Stack.Screen
+        name="ProfileMain"
+        component={ProfileScreen}
+        options={{ title: 'My Profile' }}
+      />
+      {/* Products */}
       <Stack.Screen
         name="ProductList"
         component={ProductListScreen}
@@ -114,14 +118,7 @@ function ProductsStack() {
           ({ title: route.params?.product ? 'Edit Product' : 'New Product' })
         }
       />
-    </Stack.Navigator>
-  );
-}
-
-/** Nested stack for the Categories tab */
-function CategoriesStack() {
-  return (
-    <Stack.Navigator screenOptions={sharedStackOptions}>
+      {/* Categories */}
       <Stack.Screen
         name="CategoryList"
         component={CategoryListScreen}
@@ -189,28 +186,14 @@ function AppTabs() {
         options={{ headerShown: false }}
       />
       <Tab.Screen
-        name="Products"
-        component={ProductsStack}
-        options={{ headerShown: false }}
-      />
-      <Tab.Screen
-        name="Categories"
-        component={CategoriesStack}
-        options={{ headerShown: false }}
-      />
-      <Tab.Screen
         name="Orders"
         component={OrdersStack}
         options={{ headerShown: false }}
       />
       <Tab.Screen
         name="Profile"
-        component={ProfileScreen}
-        options={{
-          ...sharedStackOptions,
-          headerShown: true,
-          title: 'My Profile',
-        }}
+        component={ProfileStack}
+        options={{ headerShown: false }}
       />
     </Tab.Navigator>
   );

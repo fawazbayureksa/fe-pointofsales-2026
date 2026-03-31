@@ -83,7 +83,7 @@ const pStyles = StyleSheet.create({
   },
 });
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }) {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const { logout, isLoading: isLoggingOut } = useAuth();
@@ -204,6 +204,25 @@ export default function ProfileScreen() {
             })}
           </View>
         </Card.Content>
+      </Card>
+
+      <Divider style={styles.divider} />
+
+      {/* ── Management ─────────────────────────────────────────────────────────── */}
+      <Text variant="labelMedium" style={styles.sectionLabel}>Management</Text>
+
+      <Card style={styles.actionCard} elevation={1}>
+        <TouchableListItem
+          icon="package-variant-closed"
+          label="Products"
+          onPress={() => navigation.navigate('ProductList')}
+        />
+        <Divider style={styles.listDivider} />
+        <TouchableListItem
+          icon="shape-outline"
+          label="Categories"
+          onPress={() => navigation.navigate('CategoryList')}
+        />
       </Card>
 
       <Divider style={styles.divider} />
