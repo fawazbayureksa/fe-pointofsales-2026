@@ -224,8 +224,8 @@ export default function POSScreen({ navigation }) {
         {categories.map((cat) => (
           <Chip
             key={cat.id}
-            selected={selectedCategory === cat.id}
-            onPress={() => setSelectedCategory(cat.id)}
+            selected={selectedCategory === cat.name}
+            onPress={() => setSelectedCategory(cat.name)}
             style={styles.catChip}
             compact
           >

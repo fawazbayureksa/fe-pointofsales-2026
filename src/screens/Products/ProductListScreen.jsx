@@ -21,9 +21,8 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
 import { useProductList, useDeleteProduct } from '../../hooks/useProducts';
-import { getCategories } from '../../api/products';
+import { useAllCategories } from '../../hooks/useCategories';
 import { formatCurrency } from '../../utils/currency';
 import { resolveImageUrl } from '../../utils/image';
 
@@ -122,10 +121,7 @@ export default function ProductListScreen({ navigation }) {
     refetch,
   } = useProductList(queryParams);
 
-  const { data: categories = [] } = useQuery({
-    queryKey: ['categories'],
-    queryFn: getCategories,
-  });
+  const { data: categories = [] } = useAllCategories();
 
   const products = flattenPages(data);
 
