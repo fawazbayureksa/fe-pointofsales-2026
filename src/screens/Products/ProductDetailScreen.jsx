@@ -101,6 +101,7 @@ export default function ProductDetailScreen({ route, navigation }) {
           </Text>
           <Divider style={styles.divider} />
 
+          <DetailRow label="Category"    value={product.category} />
           <DetailRow label="SKU"         value={product.sku} />
           <DetailRow label="Barcode"     value={product.barcode} />
           <DetailRow label="Unit"        value={product.unit} />

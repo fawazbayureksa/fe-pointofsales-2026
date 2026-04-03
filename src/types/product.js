@@ -6,20 +6,21 @@
  * @property {string|null}  barcode
  * @property {string|null}  description
  * @property {number|null}  category_id
+ * @property {string|null}  category       – category name resolved on the server
  * @property {string}       price          – decimal string from API, e.g. "25000.00"
  * @property {string|null}  cost_price
  * @property {string|null}  unit
  * @property {boolean}      is_active
  * @property {boolean}      track_stock
  * @property {string|null}  image
- * @property {number}       [stock]        – optional, present when outlet_id is provided
+ * @property {number|null}  [stock]        – populated when outlet_id is passed to the list endpoint
  */
 
 /**
  * @typedef {Object} ProductQueryParams
- * @property {string}  [search]
- * @property {string}  [category]
- * @property {number}  [outlet_id]
+ * @property {string}  [search]       – matches name, SKU, or barcode
+ * @property {string}  [category]     – filter by category name
+ * @property {number}  [outlet_id]    – also populates `stock` field per item
  * @property {number}  [per_page]
  * @property {number}  [page]
  */
@@ -27,20 +28,29 @@
 /**
  * @typedef {Object} CreateProductData
  * @property {string}  name
- * @property {string}  [sku]
+ * @property {string}  [sku]                – must be unique
  * @property {string}  [barcode]
  * @property {string}  [description]
- * @property {number}  [category_id]
+ * @property {string}  [category]           – category name string (not ID)
  * @property {number}  price
  * @property {number}  [cost_price]
+ * @property {number}  [stock]              – initial stock quantity
+ * @property {number}  [low_stock_threshold]
  * @property {string}  [unit]
- * @property {boolean} [track_stock]
+ * @property {number}  [outlet_id]          – outlet to assign initial stock to
+ * @property {boolean} [track_stock]        – default true
  * @property {boolean} [is_active]
- * @property {number}  [outlet_id]
  */
 
 /**
- * @typedef {Partial<CreateProductData>} UpdateProductData
+ * @typedef {Object} UpdateProductData
+ * @property {string}  [name]
+ * @property {number}  [price]
+ * @property {number}  [cost_price]
+ * @property {number}  [stock]
+ * @property {number}  [low_stock_threshold]
+ * @property {string}  [category]           – category name string
+ * @property {boolean} [is_active]
  */
 
 /**

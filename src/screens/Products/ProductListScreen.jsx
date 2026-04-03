@@ -160,9 +160,7 @@ export default function ProductListScreen({ navigation }) {
     );
   };
 
-  const selectedCategoryName =
-    categories.find((c) => String(c.id) === String(selectedCategory))?.name ??
-    'All Categories';
+  const selectedCategoryName = selectedCategory ?? 'All Categories';
 
   return (
     <View style={styles.container}>
@@ -202,7 +200,7 @@ export default function ProductListScreen({ navigation }) {
               key={cat.id}
               title={cat.name}
               onPress={() => {
-                setSelectedCategory(cat.id);
+                setSelectedCategory(cat.name);
                 setCategoryMenuVisible(false);
               }}
             />
