@@ -223,6 +223,31 @@ export default function ProfileScreen({ navigation }) {
           label="Categories"
           onPress={() => navigation.navigate('CategoryList')}
         />
+        <Divider style={styles.listDivider} />
+        <TouchableListItem
+          icon="account-group-outline"
+          label="Customers"
+          onPress={() => navigation.navigate('CustomerList')}
+        />
+        <Divider style={styles.listDivider} />
+        <TouchableListItem
+          icon="package-variant-closed-check"
+          label="Stock"
+          onPress={() => navigation.navigate('Stock')}
+        />
+      </Card>
+
+      <Divider style={styles.divider} />
+
+      {/* ── Reports ─────────────────────────────────────────────────────────────── */}
+      <Text variant="labelMedium" style={styles.sectionLabel}>Reports</Text>
+
+      <Card style={styles.actionCard} elevation={1}>
+        <TouchableListItem
+          icon="cash-multiple"
+          label="Payment History"
+          onPress={() => navigation.navigate('PaymentHistory')}
+        />
       </Card>
 
       <Divider style={styles.divider} />

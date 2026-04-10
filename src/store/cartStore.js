@@ -80,8 +80,23 @@ const useCartStore = create((set, get) => ({
   setOutlet: (id) => set({ outletId: id }),
   setNotes: (notes) => set({ notes }),
 
+  // ── Order-level discount & loyalty ───────────────────────────────────────────
+  orderDiscount: null, // { amount, type: 'fixed'|'percentage', supervisorId, supervisorName }
+  loyaltyPointsRedeemed: 0,
+
+  setOrderDiscount: (discount) => set({ orderDiscount: discount }),
+  clearOrderDiscount: () => set({ orderDiscount: null }),
+  setLoyaltyPointsRedeemed: (pts) => set({ loyaltyPointsRedeemed: pts }),
+
   clearCart: () =>
-    set({ items: [], customerId: null, customerName: null, notes: '' }),
+    set({
+      items: [],
+      customerId: null,
+      customerName: null,
+      notes: '',
+      orderDiscount: null,
+      loyaltyPointsRedeemed: 0,
+    }),
 }));
 
 export default useCartStore;

@@ -53,3 +53,13 @@ export async function getCategories() {
   const response = await client.get('/categories', { params: { all: true } });
   return response.data;
 }
+
+/**
+ * Lookup a product by barcode.
+ * @param {string} barcode
+ * @returns {Promise<import('../types/product').Product>}
+ */
+export async function getProductByBarcode(barcode) {
+  const response = await client.get(`/products/barcode/${encodeURIComponent(barcode)}`);
+  return response.data.data ?? response.data;
+}

@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getOrders, getOrder, createOrder, payOrder, cancelOrder } from '../api/orders';
+import { getOrders, getOrder, createOrder, payOrder, cancelOrder, refundOrder, applyOrderDiscount } from '../api/orders';
 
 const KEY = 'orders';
 
@@ -51,6 +51,27 @@ export function useCancelOrder() {
     mutationFn: ({ id, reason }) => cancelOrder(id, reason),
     onSuccess: (_result, { id }) => {
       qc.invalidateQueries({ queryKey: [KEY] });
+      qc.invalidateQueries({ queryKey: [KEY, id] });
+    },
+  });
+}
+
+export function useRefundOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason, supervisor_id }) => refundOrder(id, { reason, supervisor_id }),
+    onSuccess: (_result, { id }) => {
+      qc.invalidateQueries({ queryKey: [KEY] });
+      qc.invalidateQueries({ queryKey: [KEY, id] });
+    },
+  });
+}
+
+export function useApplyOrderDiscount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...payload }) => applyOrderDiscount(id, payload),
+    onSuccess: (_result, { id }) => {
       qc.invalidateQueries({ queryKey: [KEY, id] });
     },
   });

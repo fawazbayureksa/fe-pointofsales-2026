@@ -10,13 +10,23 @@ export async function login(email, password) {
   return response.data;
 }
 
+/**
+ * @param {string} pin
+ * @returns {Promise<import('../types/auth').LoginResponse>}
+ */
+export async function loginPin(pin) {
+  const response = await client.post('/auth/login-pin', { pin });
+  return response.data;
+}
+
 /** @returns {Promise<void>} */
 export async function logout() {
   await client.post('/auth/logout');
 }
 
 /**
- * @returns {Promise<import('../types/auth').User>}
+ * Fetch the current authenticated user's profile (roles/permissions).
+ * @returns {Promise<{ data: import('../types/auth').User }>}
  */
 export async function getMe() {
   const response = await client.get('/auth/me');

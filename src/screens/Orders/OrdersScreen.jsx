@@ -20,16 +20,20 @@ import { formatCurrency } from '../../utils/currency';
 import { formatDate } from '../../utils/date';
 
 const STATUS_TABS = [
-  { key: '',          label: 'All' },
-  { key: 'pending',   label: 'Pending' },
-  { key: 'completed', label: 'Completed' },
-  { key: 'cancelled', label: 'Cancelled' },
+  { key: '',           label: 'All' },
+  { key: 'pending',    label: 'Pending' },
+  { key: 'processing', label: 'Processing' },
+  { key: 'completed',  label: 'Completed' },
+  { key: 'cancelled',  label: 'Cancelled' },
+  { key: 'refunded',   label: 'Refunded' },
 ];
 
 const STATUS_COLORS = {
-  pending:   { bg: '#FFF3E0', text: '#E65100' },
-  completed: { bg: '#E8F5E9', text: '#2E7D32' },
-  cancelled: { bg: '#F5F5F5', text: '#757575' },
+  pending:    { bg: '#FFF3E0', text: '#E65100' },
+  processing: { bg: '#E3F2FD', text: '#1565C0' },
+  completed:  { bg: '#E8F5E9', text: '#2E7D32' },
+  cancelled:  { bg: '#F5F5F5', text: '#757575' },
+  refunded:   { bg: '#EDE7F6', text: '#6A1B9A' },
 };
 
 function StatusBadge({ status }) {
