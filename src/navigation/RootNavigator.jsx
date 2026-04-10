@@ -8,7 +8,7 @@ import LoginScreen from '../screens/Auth/LoginScreen';
 import DashboardScreen from '../screens/Dashboard/DashboardScreen';
 import POSScreen from '../screens/POS/POSScreen';
 import OrdersScreen from '../screens/Orders/OrdersScreen';
-import SettingsScreen from '../screens/Settings/SettingsScreen';
+import ProfileScreen from '../screens/Profile/ProfileScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -23,7 +23,11 @@ function AppTabs() {
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="POS" component={POSScreen} />
       <Tab.Screen name="Orders" component={OrdersScreen} />
-      <Tab.Screen name="Settings" component={SettingsScreen} />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ headerShown: true, title: 'My Profile' }}
+      />
     </Tab.Navigator>
   );
 }
