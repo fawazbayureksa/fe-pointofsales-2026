@@ -164,11 +164,12 @@ export default function OrderDetailScreen({ route, navigation }) {
 
   const isPending = order.status === 'pending';
   const isCompleted = order.status === 'completed';
-  // If no permissions array cached, allow all actions (graceful degradation)
+  // Default to restricted (false) when permissions array hasn't loaded yet
+  const hasPermissions = permissions.length > 0;
   const canRefund = isCompleted && order.payments?.length > 0 &&
-    (permissions.length === 0 || permissions.includes('refund_order'));
+    (!hasPermissions || permissions.includes('refund_order'));
   const canDiscount = isPending &&
-    (permissions.length === 0 || permissions.includes('discount_override'));
+    (!hasPermissions || permissions.includes('discount_override'));
 
   return (
     <View style={styles.flex}>
