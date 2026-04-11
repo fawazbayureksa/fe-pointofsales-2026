@@ -9,19 +9,53 @@ import DashboardScreen from '../screens/Dashboard/DashboardScreen';
 import POSScreen from '../screens/POS/POSScreen';
 import OrdersScreen from '../screens/Orders/OrdersScreen';
 import ProfileScreen from '../screens/Profile/ProfileScreen';
+import ProductListScreen from '../screens/Products/ProductListScreen';
+import ProductDetailScreen from '../screens/Products/ProductDetailScreen';
+import ProductFormScreen from '../screens/Products/ProductFormScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
+
+/** Nested stack for the Products tab */
+function ProductsStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen
+        name="ProductList"
+        component={ProductListScreen}
+        options={{ title: 'Products' }}
+      />
+      <Stack.Screen
+        name="ProductDetail"
+        component={ProductDetailScreen}
+        options={{ title: 'Product Detail' }}
+      />
+      <Stack.Screen
+        name="ProductForm"
+        component={ProductFormScreen}
+        options={({ route }) =>
+          ({ title: route.params?.product ? 'Edit Product' : 'New Product' })
+        }
+      />
+    </Stack.Navigator>
+  );
+}
 
 function AppTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarActiveTintColor: '#6200ee',
+        tabBarActiveTintColor: '#547792',
+        tabBarInactiveTintColor: '#94B4C1',
       }}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="POS" component={POSScreen} />
+      <Tab.Screen
+        name="Products"
+        component={ProductsStack}
+        options={{ headerShown: false }}
+      />
       <Tab.Screen name="Orders" component={OrdersScreen} />
       <Tab.Screen
         name="Profile"

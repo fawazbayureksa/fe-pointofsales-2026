@@ -31,8 +31,16 @@ client.interceptors.response.use(
       resetTo('Auth');
     }
 
-    const message =
-      error.response?.data?.message || error.message || 'Something went wrong';
+    let message = error.response?.data?.message;
+    if (!message) {
+      if (error.message === 'Network Error' || error.code === 'ERR_NETWORK') {
+        message = 'Unable to connect to server. Please check your connection.';
+      } else if (error.code === 'ECONNABORTED') {
+        message = 'Request timed out. Please try again.';
+      } else {
+        message = error.message || 'Something went wrong.';
+      }
+    }
     const errors = error.response?.data?.errors || {};
 
     return Promise.reject({ message, errors });
