@@ -17,6 +17,7 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAllOutlets } from '../hooks/useOutlets';
 import { useStartShift, useEndShift, useCurrentShift } from '../hooks/useShift';
 import { formatCurrency } from '../utils/currency';
@@ -34,6 +35,7 @@ import { formatDate } from '../utils/date';
  */
 export default function ShiftBanner({ shift, onShiftStarted, onShiftEnded }) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const [startVisible, setStartVisible] = useState(false);
   const [endVisible, setEndVisible] = useState(false);
   const [summaryVisible, setSummaryVisible] = useState(false);
@@ -122,7 +124,7 @@ export default function ShiftBanner({ shift, onShiftStarted, onShiftEnded }) {
     return (
       <>
         <TouchableOpacity
-          style={[styles.noShiftBanner, { backgroundColor: '#FFF3E0' }]}
+          style={[styles.noShiftBanner, { backgroundColor: '#FFF3E0', paddingTop: insets.top + 10 }]}
           onPress={openStartDialog}
           activeOpacity={0.85}
         >
@@ -151,7 +153,7 @@ export default function ShiftBanner({ shift, onShiftStarted, onShiftEnded }) {
 
   return (
     <>
-      <View style={[styles.banner, { backgroundColor: '#E8F5E9' }]}>
+      <View style={[styles.banner, { backgroundColor: '#E8F5E9', paddingTop: insets.top + 8 }]}>
         <View style={styles.bannerLeft}>
           <MaterialCommunityIcons name="clock-check-outline" size={16} color="#2E7D32" />
           <View style={styles.bannerInfo}>
