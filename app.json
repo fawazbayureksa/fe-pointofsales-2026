@@ -26,7 +26,14 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to upload product images.",
+          "cameraPermission": "Allow $(PRODUCT_NAME) to use the camera to take product photos."
+        }
+      ]
     ]
   }
 }

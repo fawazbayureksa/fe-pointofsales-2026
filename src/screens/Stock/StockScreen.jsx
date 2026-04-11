@@ -87,7 +87,10 @@ function StockAdjustModal({ visible, onDismiss, onSuccess }) {
   const [errors, setErrors] = useState({});
   const [productListVisible, setProductListVisible] = useState(false);
 
-  const { data: prodData } = useProductList({ search: productSearch || undefined });
+  const { data: prodData } = useProductList({
+    search: productSearch || undefined,
+    outlet_id: selectedOutletId || undefined,
+  });
   const products = prodData?.pages.flatMap((p) => p.data ?? []) ?? [];
 
   const { data: outlets = [] } = useAllOutlets();
@@ -152,8 +155,44 @@ function StockAdjustModal({ visible, onDismiss, onSuccess }) {
           <Text variant="titleLarge" style={styles.modalTitle}>Adjust Stock</Text>
 
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            {/* Product search */}
-            <Text variant="labelMedium" style={styles.fieldLabel}>Product *</Text>
+            {/* Outlet — must be selected first */}
+            <Text variant="labelMedium" style={styles.fieldLabel}>Outlet *</Text>
+            <View style={styles.optionRow}>
+              {outlets.map((o) => (
+                <TouchableOpacity
+                  key={o.id}
+                  style={[
+                    styles.optionBtn,
+                    selectedOutletId === o.id && styles.optionBtnActive,
+                  ]}
+                  onPress={() => {
+                    if (selectedOutletId !== o.id) {
+                      setSelectedOutletId(o.id);
+                      setSelectedProduct(null);
+                      setProductSearch('');
+                      setProductListVisible(false);
+                    }
+                  }}
+                >
+                  <Text style={[styles.optionText, selectedOutletId === o.id && styles.optionTextActive]}>
+                    {o.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {errors.outlet_id && <Text style={styles.fieldError}>{errors.outlet_id[0]}</Text>}
+
+            {/* Product search — only after outlet is chosen */}
+            <Text variant="labelMedium" style={[styles.fieldLabel, { marginTop: 12 }]}>Product *</Text>
+            {!selectedOutletId ? (
+              <View style={styles.productGate}>
+                <MaterialCommunityIcons name="store-outline" size={18} color="#94B4C1" />
+                <Text variant="bodySmall" style={styles.productGateText}>
+                  Select an outlet above to search products
+                </Text>
+              </View>
+            ) : (
+              <>
             <Searchbar
               placeholder="Search product…"
               value={productSearch}
@@ -166,30 +205,73 @@ function StockAdjustModal({ visible, onDismiss, onSuccess }) {
               style={styles.productSearch}
             />
             {selectedProduct && (
-              <View style={styles.selectedProductBox}>
-                <MaterialCommunityIcons name="package-variant" size={16} color="#547792" />
-                <Text variant="bodySmall" style={{ flex: 1, color: '#213448', fontWeight: '600' }}>
-                  {selectedProduct.name}
-                </Text>
-                <Text variant="bodySmall" style={{ color: '#888' }}>
-                  Stock: {currentStock}
-                </Text>
+              <View style={styles.selectedProductCard}>
+                <View style={styles.selectedProductAccent} />
+                <View style={styles.selectedProductIcon}>
+                  <MaterialCommunityIcons name="package-variant-closed" size={22} color="#547792" />
+                </View>
+                <View style={styles.selectedProductInfo}>
+                  <Text variant="bodyMedium" style={styles.selectedProductName} numberOfLines={1}>
+                    {selectedProduct.name}
+                  </Text>
+                  {selectedProduct.sku ? (
+                    <Text variant="bodySmall" style={styles.selectedProductSku}>
+                      SKU: {selectedProduct.sku}
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={styles.selectedProductStockBadge}>
+                  <Text style={styles.selectedProductStockLabel}>Stock</Text>
+                  <Text style={styles.selectedProductStockValue}>{currentStock}</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    setSelectedProduct(null);
+                    setProductSearch('');
+                    setProductListVisible(false);
+                  }}
+                  style={styles.selectedProductClear}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <MaterialCommunityIcons name="close-circle" size={18} color="#94B4C1" />
+                </TouchableOpacity>
               </View>
             )}
             {productListVisible && products.length > 0 && !selectedProduct && (
               <View style={styles.productDropdown}>
-                {products.slice(0, 8).map((p) => (
+                {products.slice(0, 8).map((p, index) => (
                   <TouchableOpacity
                     key={p.id}
-                    style={styles.productDropdownItem}
+                    style={[
+                      styles.productDropdownItem,
+                      index === products.slice(0, 8).length - 1 && { borderBottomWidth: 0 },
+                    ]}
                     onPress={() => {
                       setSelectedProduct(p);
                       setProductSearch(p.name);
                       setProductListVisible(false);
                     }}
+                    activeOpacity={0.7}
                   >
-                    <Text variant="bodySmall" numberOfLines={1}>{p.name}</Text>
-                    {p.sku && <Text variant="bodySmall" style={{ color: '#888' }}>{p.sku}</Text>}
+                    <View style={styles.dropdownItemIcon}>
+                      <MaterialCommunityIcons name="cube-outline" size={18} color="#547792" />
+                    </View>
+                    <View style={styles.dropdownItemInfo}>
+                      <Text variant="bodyMedium" numberOfLines={1} style={styles.dropdownItemName}>
+                        {p.name}
+                      </Text>
+                      {p.sku ? (
+                        <Text variant="bodySmall" style={styles.dropdownItemSku}>
+                          {p.sku}
+                        </Text>
+                      ) : null}
+                    </View>
+                    {p.stock != null && (
+                      <View style={styles.dropdownStockChip}>
+                        <Text style={styles.dropdownStockText}>{p.stock}</Text>
+                      </View>
+                    )}
+                    <MaterialCommunityIcons name="chevron-right" size={16} color="#CCC" />
                   </TouchableOpacity>
                 ))}
               </View>
@@ -197,26 +279,8 @@ function StockAdjustModal({ visible, onDismiss, onSuccess }) {
             {errors.product_id && (
               <Text style={styles.fieldError}>{errors.product_id[0]}</Text>
             )}
-
-            {/* Outlet */}
-            <Text variant="labelMedium" style={[styles.fieldLabel, { marginTop: 12 }]}>Outlet *</Text>
-            <View style={styles.optionRow}>
-              {outlets.map((o) => (
-                <TouchableOpacity
-                  key={o.id}
-                  style={[
-                    styles.optionBtn,
-                    selectedOutletId === o.id && styles.optionBtnActive,
-                  ]}
-                  onPress={() => setSelectedOutletId(o.id)}
-                >
-                  <Text style={[styles.optionText, selectedOutletId === o.id && styles.optionTextActive]}>
-                    {o.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {errors.outlet_id && <Text style={styles.fieldError}>{errors.outlet_id[0]}</Text>}
+              </>
+            )}
 
             {/* Adjustment */}
             <TextInput
@@ -408,30 +472,104 @@ const styles = StyleSheet.create({
   fieldInput: { marginBottom: 4, marginTop: 8 },
   fieldError: { color: '#B00020', fontSize: 12, marginBottom: 4 },
   productSearch: { marginBottom: 6 },
-  selectedProductBox: {
+  productGate: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#EDF3F7',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    backgroundColor: '#F5F8FA',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#DDE6EC',
+    borderStyle: 'dashed',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     marginBottom: 4,
   },
+  productGateText: { color: '#94B4C1', fontStyle: 'italic' },
+  selectedProductCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F6FA',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#94B4C1',
+    marginBottom: 4,
+    overflow: 'hidden',
+    gap: 10,
+    paddingRight: 12,
+    paddingVertical: 12,
+  },
+  selectedProductAccent: {
+    width: 4,
+    alignSelf: 'stretch',
+    backgroundColor: '#547792',
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
+  },
+  selectedProductIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#D6E8F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedProductInfo: { flex: 1, justifyContent: 'center' },
+  selectedProductName: { color: '#213448', fontWeight: '700', fontSize: 13 },
+  selectedProductSku: { color: '#94B4C1', fontSize: 11, marginTop: 1 },
+  selectedProductStockBadge: {
+    alignItems: 'center',
+    backgroundColor: '#547792',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    minWidth: 44,
+  },
+  selectedProductStockLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 9, fontWeight: '600', letterSpacing: 0.5 },
+  selectedProductStockValue: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  selectedProductClear: { marginLeft: 4 },
   productDropdown: {
     borderWidth: 1,
-    borderColor: '#DDD',
-    borderRadius: 8,
+    borderColor: '#DDE6EC',
+    borderRadius: 12,
     backgroundColor: '#fff',
     marginBottom: 4,
-    elevation: 4,
+    overflow: 'hidden',
+    elevation: 6,
+    shadowColor: '#547792',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
   productDropdownItem: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    gap: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#EEE',
+    borderBottomColor: '#EEF3F6',
   },
+  dropdownItemIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#EDF3F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dropdownItemInfo: { flex: 1 },
+  dropdownItemName: { color: '#213448', fontWeight: '600', fontSize: 13 },
+  dropdownItemSku: { color: '#94B4C1', fontSize: 11, marginTop: 1 },
+  dropdownStockChip: {
+    backgroundColor: '#EDF3F7',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: '#94B4C1',
+  },
+  dropdownStockText: { color: '#547792', fontSize: 11, fontWeight: '700' },
   stockHelper: { color: '#547792', marginBottom: 4, fontWeight: '600' },
   optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   optionBtn: {

@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   ScrollView,
   StyleSheet,
   Modal as RNModal,
+  Image,
+  TouchableOpacity,
 } from 'react-native';
 import {
   Text,
@@ -15,10 +17,13 @@ import {
   useTheme,
   Menu,
 } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 import CategoryPicker from '../../components/CategoryPicker';
 import { useCreateProduct, useUpdateProduct } from '../../hooks/useProducts';
 import { useAllOutlets } from '../../hooks/useOutlets';
+import { resolveImageUrl } from '../../utils/image';
 
 const INITIAL_FORM = {
   name: '',
@@ -88,6 +93,43 @@ export default function ProductFormScreen({ route, navigation }) {
       : { ...INITIAL_FORM },
   );
 
+  // ── Image ─────────────────────────────────────────────────────────────────
+  // localImageUri: newly picked image (local file URI)
+  // existingImageUrl: image already on the server (for edit mode)
+  const [localImageUri, setLocalImageUri] = useState(null);
+  const existingImageUrl = isEdit ? (editingProduct.image ?? null) : null;
+
+  const pickImage = async (fromCamera) => {
+    const { status } = fromCamera
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (status !== 'granted') {
+      setSnackbar({ visible: true, message: 'Permission denied.' });
+      return;
+    }
+
+    const result = fromCamera
+      ? await ImagePicker.launchCameraAsync({
+          mediaTypes: 'images',
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.8,
+        })
+      : await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: 'images',
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.8,
+        });
+
+    if (!result.canceled) {
+      setLocalImageUri(result.assets[0].uri);
+    }
+  };
+
+  const [imageMenuVisible, setImageMenuVisible] = useState(false);
+
   const [fieldErrors, setFieldErrors] = useState({});
   const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
 
@@ -148,6 +190,7 @@ export default function ProductFormScreen({ route, navigation }) {
           low_stock_threshold: form.low_stock_threshold !== '' ? parseFloat(form.low_stock_threshold)      : undefined,
           category:            form.category                  || undefined,
           is_active:           form.is_active,
+          ...(localImageUri ? { image: localImageUri } : {}),
         };
         await updateMutation.mutateAsync({ id: editingProduct.id, data: payload });
       } else {
@@ -166,9 +209,10 @@ export default function ProductFormScreen({ route, navigation }) {
           low_stock_threshold: form.low_stock_threshold !== '' ? parseFloat(form.low_stock_threshold)      : undefined,
           unit:                form.unit.trim()               || undefined,
           category:            form.category                  || undefined,
-          outlet_id:           form.outlet_id                 ? form.outlet_id                                : undefined,
+          outlet_id:           form.outlet_id                 ? form.outlet_id                             : undefined,
           track_stock:         form.track_stock,
           is_active:           form.is_active,
+          ...(localImageUri ? { image: localImageUri } : {}),
         };
         await createMutation.mutateAsync(payload);
       }
@@ -185,7 +229,76 @@ export default function ProductFormScreen({ route, navigation }) {
   return (
     <View style={styles.flex}>
       <ScrollView contentContainerStyle={styles.container}>
+        {/* ── Image picker ───────────────────────────────────────────────────── */}
         <Text variant="titleLarge" style={styles.sectionTitle}>
+          Product Image
+        </Text>
+        <Divider style={styles.divider} />
+
+        <View style={styles.imagePickerRow}>
+          <TouchableOpacity
+            style={styles.imagePreview}
+            onPress={() => setImageMenuVisible(true)}
+          >
+            {localImageUri ? (
+              <Image source={{ uri: localImageUri }} style={styles.imagePreviewImg} />
+            ) : existingImageUrl ? (
+              <Image source={{ uri: resolveImageUrl(existingImageUrl) }} style={styles.imagePreviewImg} />
+            ) : (
+              <View style={styles.imagePreviewPlaceholder}>
+                <MaterialCommunityIcons name="image-plus" size={36} color="#94B4C1" />
+                <Text variant="bodySmall" style={styles.imageHint}>Tap to add image</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {(localImageUri || existingImageUrl) && (
+            <Button
+              mode="outlined"
+              icon="pencil-outline"
+              onPress={() => setImageMenuVisible(true)}
+              style={styles.imageEditBtn}
+            >
+              Change
+            </Button>
+          )}
+          {localImageUri && (
+            <Button
+              mode="outlined"
+              icon="close"
+              onPress={() => setLocalImageUri(null)}
+              style={styles.imageEditBtn}
+              textColor="#C62828"
+            >
+              Remove
+            </Button>
+          )}
+        </View>
+
+        <Menu
+          visible={imageMenuVisible}
+          onDismiss={() => setImageMenuVisible(false)}
+          anchor={{ x: 16, y: 160 }}
+        >
+          <Menu.Item
+            leadingIcon="camera"
+            title="Take Photo"
+            onPress={() => {
+              setImageMenuVisible(false);
+              pickImage(true);
+            }}
+          />
+          <Menu.Item
+            leadingIcon="image"
+            title="Choose from Library"
+            onPress={() => {
+              setImageMenuVisible(false);
+              pickImage(false);
+            }}
+          />
+        </Menu>
+
+        <Text variant="titleLarge" style={[styles.sectionTitle, { marginTop: 16 }]}>
           Basic Info
         </Text>
         <Divider style={styles.divider} />
@@ -458,6 +571,21 @@ const styles = StyleSheet.create({
   },
   saveBtn: { marginTop: 24, borderRadius: 8 },
   saveBtnContent: { paddingVertical: 6 },
+  imagePickerRow: { flexDirection: 'column', alignItems: 'flex-start', marginBottom: 8, gap: 8 },
+  imagePreview: {
+    width: 120,
+    height: 120,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#EDF3F7',
+    borderWidth: 1,
+    borderColor: '#D0DDE3',
+    borderStyle: 'dashed',
+  },
+  imagePreviewImg: { width: '100%', height: '100%' },
+  imagePreviewPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 4 },
+  imageHint: { color: '#94B4C1', textAlign: 'center' },
+  imageEditBtn: { alignSelf: 'flex-start' },
   // Barcode scanner
   scannerContainer: { flex: 1, backgroundColor: '#000' },
   scannerOverlay: {
