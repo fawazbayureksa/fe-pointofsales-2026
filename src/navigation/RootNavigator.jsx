@@ -12,6 +12,8 @@ import ProfileScreen from '../screens/Profile/ProfileScreen';
 import ProductListScreen from '../screens/Products/ProductListScreen';
 import ProductDetailScreen from '../screens/Products/ProductDetailScreen';
 import ProductFormScreen from '../screens/Products/ProductFormScreen';
+import CategoryListScreen from '../screens/Categories/CategoryListScreen';
+import CategoryFormScreen from '../screens/Categories/CategoryFormScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -41,6 +43,26 @@ function ProductsStack() {
   );
 }
 
+/** Nested stack for the Categories tab */
+function CategoriesStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen
+        name="CategoryList"
+        component={CategoryListScreen}
+        options={{ title: 'Categories' }}
+      />
+      <Stack.Screen
+        name="CategoryForm"
+        component={CategoryFormScreen}
+        options={({ route }) =>
+          ({ title: route.params?.category ? 'Edit Category' : 'New Category' })
+        }
+      />
+    </Stack.Navigator>
+  );
+}
+
 function AppTabs() {
   return (
     <Tab.Navigator
@@ -54,6 +76,11 @@ function AppTabs() {
       <Tab.Screen
         name="Products"
         component={ProductsStack}
+        options={{ headerShown: false }}
+      />
+      <Tab.Screen
+        name="Categories"
+        component={CategoriesStack}
         options={{ headerShown: false }}
       />
       <Tab.Screen name="Orders" component={OrdersScreen} />

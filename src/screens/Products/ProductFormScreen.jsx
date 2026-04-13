@@ -11,13 +11,11 @@ import {
   Button,
   Switch,
   Divider,
-  Menu,
   Snackbar,
   useTheme,
 } from 'react-native-paper';
-import { useQuery } from '@tanstack/react-query';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { getCategories } from '../../api/products';
+import CategoryPicker from '../../components/CategoryPicker';
 import { useCreateProduct, useUpdateProduct } from '../../hooks/useProducts';
 
 const INITIAL_FORM = {
@@ -89,13 +87,12 @@ export default function ProductFormScreen({ route, navigation }) {
   };
 
   // ── Categories ───────────────────────────────────────────────────────────────
-  const { data: categories = [] } = useQuery({
-    queryKey: ['categories'],
-    queryFn: getCategories,
-  });
-  const [catMenuVisible, setCatMenuVisible] = useState(false);
-  const selectedCatName =
-    categories.find((c) => c.id === form.category_id)?.name ?? 'Select category';
+  const [catPickerVisible, setCatPickerVisible] = useState(false);
+  const [selectedCatName, setSelectedCatName] = useState(
+    editingProduct?.category?.name ?? null,
+  );
+
+  const catLabel = selectedCatName ?? 'Select category';
 
   // ── Barcode scanner ──────────────────────────────────────────────────────────
   const [permission, requestPermission] = useCameraPermissions();
@@ -237,39 +234,16 @@ export default function ProductFormScreen({ route, navigation }) {
         </Text>
         <Divider style={styles.divider} />
 
-        <Menu
-          visible={catMenuVisible}
-          onDismiss={() => setCatMenuVisible(false)}
-          anchor={
-            <Button
-              mode="outlined"
-              icon="tag-outline"
-              onPress={() => setCatMenuVisible(true)}
-              style={styles.input}
-              contentStyle={{ justifyContent: 'flex-start' }}
-            >
-              {selectedCatName}
-            </Button>
-          }
+        {/* Category picker */}
+        <Button
+          mode="outlined"
+          icon="tag-outline"
+          onPress={() => setCatPickerVisible(true)}
+          style={styles.input}
+          contentStyle={{ justifyContent: 'flex-start' }}
         >
-          <Menu.Item
-            title="No category"
-            onPress={() => {
-              handleChange('category_id', null);
-              setCatMenuVisible(false);
-            }}
-          />
-          {categories.map((cat) => (
-            <Menu.Item
-              key={cat.id}
-              title={cat.name}
-              onPress={() => {
-                handleChange('category_id', cat.id);
-                setCatMenuVisible(false);
-              }}
-            />
-          ))}
-        </Menu>
+          {catLabel}
+        </Button>
         <FieldError errors={fieldErrors} field="category_id" />
 
         <FormTextInput
@@ -313,7 +287,19 @@ export default function ProductFormScreen({ route, navigation }) {
         </Button>
       </ScrollView>
 
-      {/* ── Barcode scanner modal ─────────────────────────────────────────────── */}
+      {/* ── Category picker ───────────────────────────────────────────────────── */}
+      <CategoryPicker
+        visible={catPickerVisible}
+        onDismiss={() => setCatPickerVisible(false)}
+        selectedId={form.category_id}
+        onSelect={(cat) => {
+          handleChange('category_id', cat ? cat.id : null);
+          setSelectedCatName(cat ? cat.name : null);
+          setCatPickerVisible(false);
+        }}
+      />
+
+      {/* ── Barcode scanner modal ─────────────────────────────────────────────── */}}
       <RNModal
         visible={scannerVisible}
         animationType="slide"
