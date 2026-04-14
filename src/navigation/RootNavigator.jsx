@@ -7,7 +7,9 @@ import useAuthStore from '../store/authStore';
 import LoginScreen from '../screens/Auth/LoginScreen';
 import DashboardScreen from '../screens/Dashboard/DashboardScreen';
 import POSScreen from '../screens/POS/POSScreen';
+import ReceiptScreen from '../screens/POS/ReceiptScreen';
 import OrdersScreen from '../screens/Orders/OrdersScreen';
+import OrderDetailScreen from '../screens/Orders/OrderDetailScreen';
 import ProfileScreen from '../screens/Profile/ProfileScreen';
 import ProductListScreen from '../screens/Products/ProductListScreen';
 import ProductDetailScreen from '../screens/Products/ProductDetailScreen';
@@ -17,6 +19,47 @@ import CategoryFormScreen from '../screens/Categories/CategoryFormScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
+
+/** Nested stack for the POS tab */
+function POSStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen
+        name="POSMain"
+        component={POSScreen}
+        options={{ title: 'POS', headerShown: false }}
+      />
+      <Stack.Screen
+        name="Receipt"
+        component={ReceiptScreen}
+        options={{ title: 'Receipt' }}
+      />
+      <Stack.Screen
+        name="OrderDetail"
+        component={OrderDetailScreen}
+        options={{ title: 'Order Detail' }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+/** Nested stack for the Orders tab */
+function OrdersStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen
+        name="OrderList"
+        component={OrdersScreen}
+        options={{ title: 'Orders' }}
+      />
+      <Stack.Screen
+        name="OrderDetail"
+        component={OrderDetailScreen}
+        options={{ title: 'Order Detail' }}
+      />
+    </Stack.Navigator>
+  );
+}
 
 /** Nested stack for the Products tab */
 function ProductsStack() {
@@ -72,7 +115,11 @@ function AppTabs() {
       }}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
-      <Tab.Screen name="POS" component={POSScreen} />
+      <Tab.Screen
+        name="POS"
+        component={POSStack}
+        options={{ headerShown: false }}
+      />
       <Tab.Screen
         name="Products"
         component={ProductsStack}
@@ -83,7 +130,11 @@ function AppTabs() {
         component={CategoriesStack}
         options={{ headerShown: false }}
       />
-      <Tab.Screen name="Orders" component={OrdersScreen} />
+      <Tab.Screen
+        name="Orders"
+        component={OrdersStack}
+        options={{ headerShown: false }}
+      />
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
