@@ -19,6 +19,7 @@ import {
   useTheme,
   Divider,
 } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCategoryList, useDeleteCategory } from '../../hooks/useCategories';
 
 const DEBOUNCE_MS = 400;
@@ -124,6 +125,7 @@ export default function CategoryListScreen({ navigation }) {
     if (isError) {
       return (
         <View style={styles.center}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={40} color="#C62828" />
           <Text style={styles.errorText}>Failed to load categories.</Text>
           <Button onPress={refetch} style={{ marginTop: 8 }}>Retry</Button>
         </View>
@@ -131,6 +133,7 @@ export default function CategoryListScreen({ navigation }) {
     }
     return (
       <View style={styles.center}>
+        <MaterialCommunityIcons name="shape-outline" size={40} color="#94B4C1" />
         <Text style={styles.emptyText}>No categories found.</Text>
       </View>
     );

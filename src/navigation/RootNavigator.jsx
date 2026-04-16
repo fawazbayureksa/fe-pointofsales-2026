@@ -93,8 +93,8 @@ function OrdersStack() {
   );
 }
 
-/** Nested stack for the Products tab */
-function ProductsStack() {
+/** Profile tab stack — includes Products & Categories management screens */
+function ProfileStack() {
   return (
     <Stack.Navigator screenOptions={sharedStackOptions}>
       <Stack.Screen
@@ -184,18 +184,17 @@ function AppTabs() {
         }}
       />
       <Tab.Screen
+        name="Dashboard"
+        component={DashboardScreen}
+        options={{
+          ...sharedStackOptions,
+          headerShown: true,
+          title: 'Dashboard',
+        }}
+      />
+      <Tab.Screen
         name="POS"
         component={POSStack}
-        options={{ headerShown: false }}
-      />
-      <Tab.Screen
-        name="Products"
-        component={ProductsStack}
-        options={{ headerShown: false }}
-      />
-      <Tab.Screen
-        name="Categories"
-        component={CategoriesStack}
         options={{ headerShown: false }}
       />
       <Tab.Screen

@@ -208,6 +208,25 @@ export default function ProfileScreen() {
 
       <Divider style={styles.divider} />
 
+      {/* ── Management ─────────────────────────────────────────────────────────── */}
+      <Text variant="labelMedium" style={styles.sectionLabel}>Management</Text>
+
+      <Card style={styles.actionCard} elevation={1}>
+        <TouchableListItem
+          icon="package-variant-closed"
+          label="Products"
+          onPress={() => navigation.navigate('ProductList')}
+        />
+        <Divider style={styles.listDivider} />
+        <TouchableListItem
+          icon="shape-outline"
+          label="Categories"
+          onPress={() => navigation.navigate('CategoryList')}
+        />
+      </Card>
+
+      <Divider style={styles.divider} />
+
       {/* ── Actions ────────────────────────────────────────────────────────────── */}
       <Text variant="labelMedium" style={styles.sectionLabel}>Account</Text>
 
