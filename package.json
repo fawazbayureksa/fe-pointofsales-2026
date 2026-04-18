@@ -6,7 +6,23 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test": "jest",
+    "test:coverage": "jest --coverage"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "setupFilesAfterEnv": [
+      "./jest.setup.js"
+    ],
+    "transformIgnorePatterns": [
+      "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|date-fns)"
+    ],
+    "moduleNameMapper": {
+      "^expo/src/winter$": "<rootDir>/__mocks__/expoWinter.js",
+      "^expo/src/winter/(.*)$": "<rootDir>/__mocks__/expoWinterModule.js",
+      "^expo/virtual/streams$": "<rootDir>/__mocks__/expoWinterModule.js"
+    }
   },
   "dependencies": {
     "@react-native-masked-view/masked-view": "0.3.2",
@@ -34,5 +50,11 @@
     "react-native-vector-icons": "^10.3.0",
     "zustand": "^5.0.12"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "@testing-library/react-native": "^13.3.3",
+    "axios-mock-adapter": "^2.1.0",
+    "jest": "^30.3.0",
+    "jest-expo": "~54.0.0"
+  }
 }

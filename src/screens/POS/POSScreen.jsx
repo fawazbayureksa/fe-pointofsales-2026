@@ -7,6 +7,7 @@ import {
   Image,
   ScrollView,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import {
   Text,
@@ -20,7 +21,7 @@ import {
   ActivityIndicator,
   Divider,
 } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useProductList } from '../../hooks/useProducts';
 import { useAllCategories } from '../../hooks/useCategories';
 import { useCreateOrder } from '../../hooks/useOrders';
@@ -396,6 +397,7 @@ const styles = StyleSheet.create({
   segmentBar: {
     flexDirection: 'row',
     height: 46,
+    paddingTop: Platform.OS === 'ios' ? 0 : 0,
   },
   segment: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   segmentActive: { borderBottomWidth: 3, borderBottomColor: '#94B4C1' },

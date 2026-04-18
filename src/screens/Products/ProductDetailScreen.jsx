@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   useTheme,
 } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useProduct } from '../../hooks/useProducts';
 import { formatCurrency } from '../../utils/currency';
 import { resolveImageUrl } from '../../utils/image';
