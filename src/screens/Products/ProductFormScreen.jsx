@@ -13,10 +13,12 @@ import {
   Divider,
   Snackbar,
   useTheme,
+  Menu,
 } from 'react-native-paper';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import CategoryPicker from '../../components/CategoryPicker';
 import { useCreateProduct, useUpdateProduct } from '../../hooks/useProducts';
+import { useAllOutlets } from '../../hooks/useOutlets';
 
 const INITIAL_FORM = {
   name: '',
@@ -26,6 +28,10 @@ const INITIAL_FORM = {
   price: '',
   cost_price: '',
   unit: '',
+  stock: '',
+  low_stock_threshold: '',
+  outlet_id: null,
+  category: null,
   category_id: null,
   track_stock: false,
   is_active: true,
@@ -64,16 +70,20 @@ export default function ProductFormScreen({ route, navigation }) {
   const [form, setForm] = useState(() =>
     isEdit
       ? {
-          name:        editingProduct.name         ?? '',
-          sku:         editingProduct.sku          ?? '',
-          barcode:     editingProduct.barcode      ?? '',
-          description: editingProduct.description  ?? '',
-          price:       String(editingProduct.price   ?? ''),
-          cost_price:  String(editingProduct.cost_price ?? ''),
-          unit:        editingProduct.unit         ?? '',
-          category_id: editingProduct.category_id  ?? null,
-          track_stock: editingProduct.track_stock  ?? false,
-          is_active:   editingProduct.is_active    ?? true,
+          name:                editingProduct.name              ?? '',
+          sku:                 editingProduct.sku               ?? '',
+          barcode:             editingProduct.barcode           ?? '',
+          description:         editingProduct.description       ?? '',
+          price:               String(editingProduct.price      ?? ''),
+          cost_price:          String(editingProduct.cost_price ?? ''),
+          unit:                editingProduct.unit              ?? '',
+          stock:               editingProduct.stock != null ? String(editingProduct.stock) : '',
+          low_stock_threshold: editingProduct.low_stock_threshold != null ? String(editingProduct.low_stock_threshold) : '',
+          outlet_id:           '',
+          category:            editingProduct?.category?.name ?? editingProduct?.category ?? null,
+          category_id:         editingProduct?.category_id ?? null,
+          track_stock:         editingProduct.track_stock      ?? false,
+          is_active:           editingProduct.is_active        ?? true,
         }
       : { ...INITIAL_FORM },
   );
@@ -88,11 +98,12 @@ export default function ProductFormScreen({ route, navigation }) {
 
   // ── Categories ───────────────────────────────────────────────────────────────
   const [catPickerVisible, setCatPickerVisible] = useState(false);
-  const [selectedCatName, setSelectedCatName] = useState(
-    editingProduct?.category?.name ?? null,
-  );
+  const catLabel = form.category ?? 'Select category';
 
-  const catLabel = selectedCatName ?? 'Select category';
+  // ── Outlets ──────────────────────────────────────────────────────────────────
+  const { data: outlets = [] } = useAllOutlets();
+  const [outletMenuVisible, setOutletMenuVisible] = useState(false);
+  const selectedOutletName = outlets.find((o) => o.id === form.outlet_id)?.name ?? 'Select outlet (optional)';
 
   // ── Barcode scanner ──────────────────────────────────────────────────────────
   const [permission, requestPermission] = useCameraPermissions();
@@ -122,23 +133,43 @@ export default function ProductFormScreen({ route, navigation }) {
   const handleSubmit = async () => {
     setFieldErrors({});
 
-    const payload = {
-      name:        form.name.trim(),
-      sku:         form.sku.trim()         || undefined,
-      barcode:     form.barcode.trim()     || undefined,
-      description: form.description.trim() || undefined,
-      price:       parseFloat(form.price),
-      cost_price:  form.cost_price ? parseFloat(form.cost_price) : undefined,
-      unit:        form.unit.trim()         || undefined,
-      category_id: form.category_id         || undefined,
-      track_stock: form.track_stock,
-      is_active:   form.is_active,
-    };
+    if (!form.name.trim()) {
+      setFieldErrors({ name: ['Name is required.'] });
+      return;
+    }
 
     try {
       if (isEdit) {
+        const payload = {
+          name:                form.name.trim()               || undefined,
+          price:               form.price                     ? parseFloat(form.price)                     : undefined,
+          cost_price:          form.cost_price                ? parseFloat(form.cost_price)                : undefined,
+          stock:               form.stock !== ''              ? parseFloat(form.stock)                     : undefined,
+          low_stock_threshold: form.low_stock_threshold !== '' ? parseFloat(form.low_stock_threshold)      : undefined,
+          category:            form.category                  || undefined,
+          is_active:           form.is_active,
+        };
         await updateMutation.mutateAsync({ id: editingProduct.id, data: payload });
       } else {
+        if (!form.price) {
+          setFieldErrors({ price: ['Price is required.'] });
+          return;
+        }
+        const payload = {
+          name:                form.name.trim(),
+          sku:                 form.sku.trim()                || undefined,
+          barcode:             form.barcode.trim()            || undefined,
+          description:         form.description.trim()        || undefined,
+          price:               parseFloat(form.price),
+          cost_price:          form.cost_price                ? parseFloat(form.cost_price)                : undefined,
+          stock:               form.stock !== ''              ? parseFloat(form.stock)                     : undefined,
+          low_stock_threshold: form.low_stock_threshold !== '' ? parseFloat(form.low_stock_threshold)      : undefined,
+          unit:                form.unit.trim()               || undefined,
+          category:            form.category                  || undefined,
+          outlet_id:           form.outlet_id                 ? form.outlet_id                                : undefined,
+          track_stock:         form.track_stock,
+          is_active:           form.is_active,
+        };
         await createMutation.mutateAsync(payload);
       }
       navigation.goBack();
@@ -166,46 +197,51 @@ export default function ProductFormScreen({ route, navigation }) {
           onChange={handleChange}
           errors={fieldErrors}
         />
-        <FormTextInput
-          label="SKU"
-          field="sku"
-          form={form}
-          onChange={handleChange}
-          errors={fieldErrors}
-          autoCapitalize="characters"
-        />
 
-        {/* Barcode with scanner trigger */}
-        <View style={styles.barcodeRow}>
-          <TextInput
-            label="Barcode"
-            value={form.barcode}
-            onChangeText={(v) => handleChange('barcode', v)}
-            mode="outlined"
-            error={!!fieldErrors?.barcode}
-            style={styles.barcodeInput}
-          />
-          <Button
-            mode="outlined"
-            icon="barcode-scan"
-            onPress={openScanner}
-            style={styles.scanBtn}
-            contentStyle={styles.scanBtnContent}
-          >
-            Scan
-          </Button>
-        </View>
-        <FieldError errors={fieldErrors} field="barcode" />
+        {!isEdit && (
+          <>
+            <FormTextInput
+              label="SKU"
+              field="sku"
+              form={form}
+              onChange={handleChange}
+              errors={fieldErrors}
+              autoCapitalize="characters"
+            />
 
-        <FormTextInput
-          label="Description"
-          field="description"
-          form={form}
-          onChange={handleChange}
-          errors={fieldErrors}
-          multiline
-          numberOfLines={3}
-        />
+            {/* Barcode with scanner trigger */}
+            <View style={styles.barcodeRow}>
+              <TextInput
+                label="Barcode"
+                value={form.barcode}
+                onChangeText={(v) => handleChange('barcode', v)}
+                mode="outlined"
+                error={!!fieldErrors?.barcode}
+                style={styles.barcodeInput}
+              />
+              <Button
+                mode="outlined"
+                icon="barcode-scan"
+                onPress={openScanner}
+                style={styles.scanBtn}
+                contentStyle={styles.scanBtnContent}
+              >
+                Scan
+              </Button>
+            </View>
+            <FieldError errors={fieldErrors} field="barcode" />
+
+            <FormTextInput
+              label="Description"
+              field="description"
+              form={form}
+              onChange={handleChange}
+              errors={fieldErrors}
+              multiline
+              numberOfLines={3}
+            />
+          </>
+        )}
 
         <Text variant="titleLarge" style={[styles.sectionTitle, { marginTop: 16 }]}>
           Pricing
@@ -244,28 +280,93 @@ export default function ProductFormScreen({ route, navigation }) {
         >
           {catLabel}
         </Button>
-        <FieldError errors={fieldErrors} field="category_id" />
+        <FieldError errors={fieldErrors} field="category" />
+
+        {!isEdit && (
+          <FormTextInput
+            label="Unit (e.g. pcs, kg)"
+            field="unit"
+            form={form}
+            onChange={handleChange}
+            errors={fieldErrors}
+          />
+        )}
+
+        <Text variant="titleLarge" style={[styles.sectionTitle, { marginTop: 16 }]}>
+          Stock & Inventory
+        </Text>
+        <Divider style={styles.divider} />
 
         <FormTextInput
-          label="Unit (e.g. pcs, kg)"
-          field="unit"
+          label="Stock Quantity"
+          field="stock"
           form={form}
           onChange={handleChange}
           errors={fieldErrors}
+          keyboardType="numeric"
         />
+        <FormTextInput
+          label="Low Stock Threshold"
+          field="low_stock_threshold"
+          form={form}
+          onChange={handleChange}
+          errors={fieldErrors}
+          keyboardType="numeric"
+        />
+        {!isEdit && (
+          <>
+            <Menu
+              visible={outletMenuVisible}
+              onDismiss={() => setOutletMenuVisible(false)}
+              anchor={
+                <Button
+                  mode="outlined"
+                  icon="store-outline"
+                  onPress={() => setOutletMenuVisible(true)}
+                  style={styles.input}
+                  contentStyle={{ justifyContent: 'flex-start' }}
+                >
+                  {selectedOutletName}
+                </Button>
+              }
+            >
+              <Menu.Item
+                title="None"
+                onPress={() => {
+                  handleChange('outlet_id', null);
+                  setOutletMenuVisible(false);
+                }}
+              />
+              {outlets.map((o) => (
+                <Menu.Item
+                  key={o.id}
+                  title={o.name}
+                  leadingIcon={form.outlet_id === o.id ? 'check' : undefined}
+                  onPress={() => {
+                    handleChange('outlet_id', o.id);
+                    setOutletMenuVisible(false);
+                  }}
+                />
+              ))}
+            </Menu>
+            <FieldError errors={fieldErrors} field="outlet_id" />
+          </>
+        )}
 
         <Text variant="titleLarge" style={[styles.sectionTitle, { marginTop: 16 }]}>
           Settings
         </Text>
         <Divider style={styles.divider} />
 
-        <View style={styles.switchRow}>
-          <Text variant="bodyMedium">Track Stock</Text>
-          <Switch
-            value={form.track_stock}
-            onValueChange={(v) => handleChange('track_stock', v)}
-          />
-        </View>
+        {!isEdit && (
+          <View style={styles.switchRow}>
+            <Text variant="bodyMedium">Track Stock</Text>
+            <Switch
+              value={form.track_stock}
+              onValueChange={(v) => handleChange('track_stock', v)}
+            />
+          </View>
+        )}
 
         <View style={styles.switchRow}>
           <Text variant="bodyMedium">Active</Text>
@@ -293,8 +394,8 @@ export default function ProductFormScreen({ route, navigation }) {
         onDismiss={() => setCatPickerVisible(false)}
         selectedId={form.category_id}
         onSelect={(cat) => {
+          handleChange('category', cat ? cat.name : null);
           handleChange('category_id', cat ? cat.id : null);
-          setSelectedCatName(cat ? cat.name : null);
           setCatPickerVisible(false);
         }}
       />
