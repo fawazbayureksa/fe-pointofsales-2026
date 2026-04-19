@@ -20,10 +20,10 @@ import {
   IconButton,
   useTheme,
 } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useQuery } from '@tanstack/react-query';
 import { useProductList, useDeleteProduct } from '../../hooks/useProducts';
-import { getCategories } from '../../api/products';
+import { useAllCategories } from '../../hooks/useCategories';
 import { formatCurrency } from '../../utils/currency';
 import { resolveImageUrl } from '../../utils/image';
 
@@ -122,10 +122,7 @@ export default function ProductListScreen({ navigation }) {
     refetch,
   } = useProductList(queryParams);
 
-  const { data: categories = [] } = useQuery({
-    queryKey: ['categories'],
-    queryFn: getCategories,
-  });
+  const { data: categories = [] } = useAllCategories();
 
   const products = flattenPages(data);
 
@@ -160,9 +157,7 @@ export default function ProductListScreen({ navigation }) {
     );
   };
 
-  const selectedCategoryName =
-    categories.find((c) => String(c.id) === String(selectedCategory))?.name ??
-    'All Categories';
+  const selectedCategoryName = selectedCategory ?? 'All Categories';
 
   return (
     <View style={styles.container}>
@@ -202,7 +197,7 @@ export default function ProductListScreen({ navigation }) {
               key={cat.id}
               title={cat.name}
               onPress={() => {
-                setSelectedCategory(cat.id);
+                setSelectedCategory(cat.name);
                 setCategoryMenuVisible(false);
               }}
             />

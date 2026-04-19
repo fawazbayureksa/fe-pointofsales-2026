@@ -7,9 +7,7 @@ import {
   Image,
   ScrollView,
   RefreshControl,
-  KeyboardAvoidingView,
   Platform,
-  TextInput as RNTextInput,
 } from 'react-native';
 import {
   Text,
@@ -24,10 +22,7 @@ import {
   Divider,
   TextInput,
 } from 'react-native-paper';
-import { Swipeable } from 'react-native-gesture-handler';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Haptics from 'expo-haptics';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useProductList } from '../../hooks/useProducts';
 import { useAllCategories } from '../../hooks/useCategories';
 import { useCreateOrder } from '../../hooks/useOrders';
@@ -461,8 +456,8 @@ export default function POSScreen({ navigation }) {
         {categories.map((cat) => (
           <Chip
             key={cat.id}
-            selected={selectedCategory === cat.id}
-            onPress={() => setSelectedCategory(cat.id)}
+            selected={selectedCategory === cat.name}
+            onPress={() => setSelectedCategory(cat.name)}
             style={styles.catChip}
             compact
           >
@@ -702,8 +697,12 @@ const CARD_GAP = 8;
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  segmentBar: { flexDirection: 'row', height: 46, alignItems: 'center' },
-  segment: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: '100%' },
+  segmentBar: {
+    flexDirection: 'row',
+    height: 46,
+    paddingTop: Platform.OS === 'ios' ? 0 : 0,
+  },
+  segment: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   segmentActive: { borderBottomWidth: 3, borderBottomColor: '#94B4C1' },
   segmentText: { color: 'rgba(255,255,255,0.65)', fontWeight: '600', fontSize: 14 },
   segmentTextActive: { color: '#FFFFFF' },

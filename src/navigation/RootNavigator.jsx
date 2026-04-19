@@ -2,7 +2,7 @@ import React from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import useAuthStore from '../store/authStore';
 
 // Screens
@@ -46,6 +46,8 @@ const sharedStackOptions = {
 const TAB_ICONS = {
   Dashboard:  { active: 'view-dashboard',        inactive: 'view-dashboard-outline' },
   POS:        { active: 'store',                  inactive: 'store-outline' },
+  Products:   { active: 'package-variant-closed',         inactive: 'package-variant' },
+  Categories: { active: 'shape',                  inactive: 'shape-outline' },
   Orders:     { active: 'receipt',                inactive: 'text-box-outline' },
   Profile:    { active: 'account-circle',         inactive: 'account-circle-outline' },
 };
@@ -96,12 +98,6 @@ function ProfileStack() {
   return (
     <Stack.Navigator screenOptions={sharedStackOptions}>
       <Stack.Screen
-        name="ProfileMain"
-        component={ProfileScreen}
-        options={{ title: 'My Profile' }}
-      />
-      {/* Products */}
-      <Stack.Screen
         name="ProductList"
         component={ProductListScreen}
         options={{ title: 'Products' }}
@@ -118,7 +114,14 @@ function ProfileStack() {
           ({ title: route.params?.product ? 'Edit Product' : 'New Product' })
         }
       />
-      {/* Categories */}
+    </Stack.Navigator>
+  );
+}
+
+/** Nested stack for the Categories tab */
+function CategoriesStack() {
+  return (
+    <Stack.Navigator screenOptions={sharedStackOptions}>
       <Stack.Screen
         name="CategoryList"
         component={CategoryListScreen}
@@ -181,6 +184,15 @@ function AppTabs() {
         }}
       />
       <Tab.Screen
+        name="Dashboard"
+        component={DashboardScreen}
+        options={{
+          ...sharedStackOptions,
+          headerShown: true,
+          title: 'Dashboard',
+        }}
+      />
+      <Tab.Screen
         name="POS"
         component={POSStack}
         options={{ headerShown: false }}
@@ -192,8 +204,12 @@ function AppTabs() {
       />
       <Tab.Screen
         name="Profile"
-        component={ProfileStack}
-        options={{ headerShown: false }}
+        component={ProfileScreen}
+        options={{
+          ...sharedStackOptions,
+          headerShown: true,
+          title: 'My Profile',
+        }}
       />
     </Tab.Navigator>
   );

@@ -15,7 +15,13 @@ const QUERY_KEY = 'products';
  */
 export function useProductList(params = {}) {
   return useInfiniteQuery({
-    queryKey: [QUERY_KEY, params],
+    queryKey: [
+      QUERY_KEY,
+      'list',
+      params.search    ?? null,
+      params.category  ?? null,
+      params.outlet_id ?? null,
+    ],
     queryFn: ({ pageParam = 1 }) =>
       getProducts({ ...params, page: pageParam }),
     getNextPageParam: (lastPage) =>
@@ -23,6 +29,7 @@ export function useProductList(params = {}) {
         ? lastPage.current_page + 1
         : undefined,
     initialPageParam: 1,
+    staleTime: 0,
   });
 }
 

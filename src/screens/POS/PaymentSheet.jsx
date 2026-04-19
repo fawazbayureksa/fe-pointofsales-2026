@@ -16,8 +16,7 @@ import {
   Snackbar,
   useTheme,
 } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { usePayOrder } from '../../hooks/useOrders';
 import { formatCurrency } from '../../utils/currency';
 

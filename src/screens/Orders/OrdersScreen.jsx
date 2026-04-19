@@ -14,7 +14,7 @@ import {
   useTheme,
   Button,
 } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useOrderList } from '../../hooks/useOrders';
 import { formatCurrency } from '../../utils/currency';
 import { formatDate } from '../../utils/date';

@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   useTheme,
 } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useProduct } from '../../hooks/useProducts';
 import { formatCurrency } from '../../utils/currency';
 import { resolveImageUrl } from '../../utils/image';
@@ -101,6 +101,7 @@ export default function ProductDetailScreen({ route, navigation }) {
           </Text>
           <Divider style={styles.divider} />
 
+          <DetailRow label="Category"    value={product.category} />
           <DetailRow label="SKU"         value={product.sku} />
           <DetailRow label="Barcode"     value={product.barcode} />
           <DetailRow label="Unit"        value={product.unit} />

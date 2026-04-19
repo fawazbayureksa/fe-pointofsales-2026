@@ -14,7 +14,7 @@ import {
   ActivityIndicator,
   Divider,
 } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { BarChart } from 'react-native-chart-kit';
 import { useDashboard } from '../../hooks/useDashboard';
 import { useQueryClient } from '@tanstack/react-query';
