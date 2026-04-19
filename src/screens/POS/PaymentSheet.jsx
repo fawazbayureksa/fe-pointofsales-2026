@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Modal,
@@ -20,6 +20,8 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { usePayOrder } from '../../hooks/useOrders';
 import { formatCurrency } from '../../utils/currency';
 
+const QUICK_AMOUNTS = [10_000, 20_000, 50_000, 100_000, 200_000, 500_000];
+
 const METHODS = [
   { key: 'cash',     label: 'Cash',     icon: 'cash' },
   { key: 'card',     label: 'Card',     icon: 'credit-card-outline' },
@@ -40,6 +42,7 @@ export default function PaymentSheet({ visible, order, onDismiss, onSuccess }) {
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
   const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
+  const scrollRef = useRef(null);
 
   const payMutation = usePayOrder();
 
@@ -160,10 +163,53 @@ export default function PaymentSheet({ visible, order, onDismiss, onSuccess }) {
               value={amount}
               onChangeText={setAmount}
               mode="outlined"
-              keyboardType="decimal-pad"
+              keyboardType="numeric"
               style={styles.input}
               placeholder={formatCurrency(total)}
+              onFocus={(e) => e.target.select?.()}
             />
+
+            {/* Quick-amount chips (cash only) */}
+            {isCash && (
+              <ScrollView
+                ref={scrollRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.quickAmountsContent}
+                style={styles.quickAmountsRow}
+              >
+                {QUICK_AMOUNTS.map((val) => {
+                  const selected = String(val) === amount;
+                  const isGteTotal = val >= total;
+                  return (
+                    <TouchableOpacity
+                      key={val}
+                      style={[
+                        styles.quickChip,
+                        selected && styles.quickChipSelected,
+                        isGteTotal && !selected && styles.quickChipSuggested,
+                      ]}
+                      onPress={async () => {
+                        setAmount(String(val));
+                        await Haptics.selectionAsync();
+                      }}
+                      activeOpacity={0.75}
+                    >
+                      <Text
+                        style={[
+                          styles.quickChipText,
+                          selected && styles.quickChipTextSelected,
+                        ]}
+                      >
+                        {val >= 1_000
+                          ? `${val / 1_000}K`
+                          : formatCurrency(val)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
 
             {/* Change (cash only) */}
             {isCash && paid > 0 && (
@@ -277,6 +323,41 @@ const styles = StyleSheet.create({
     color: '#666',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  quickAmountsRow: {
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  quickAmountsContent: {
+    gap: 8,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+  },
+  quickChip: {
+    height: 38,
+    borderRadius: 19,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickChipSelected: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  quickChipSuggested: {
+    borderColor: '#547792',
+    backgroundColor: '#EEF4F8',
+  },
+  quickChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#213448',
+  },
+  quickChipTextSelected: {
+    color: '#fff',
   },
   methodGrid: {
     flexDirection: 'row',

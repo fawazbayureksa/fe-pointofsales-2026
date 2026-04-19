@@ -1,14 +1,16 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   ScrollView,
   StyleSheet,
+  Share,
 } from 'react-native';
 import {
   Text,
   Button,
   Divider,
   ActivityIndicator,
+  Snackbar,
   useTheme,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -82,10 +84,48 @@ export default function ReceiptScreen({ route, navigation }) {
 
   const { data: order, isLoading, isError } = useOrder(orderId);
 
+  const [loyaltyMsg, setLoyaltyMsg] = useState('');
+
+  useEffect(() => {
+    if (order?.customer?.is_member) {
+      const pts = Math.floor(parseFloat(order.total_amount) / 1000);
+      if (pts > 0) {
+        setLoyaltyMsg(`✓ +${pts} loyalty points added to ${order.customer.name}`);
+      }
+    }
+  }, [order]);
+
   const handlePrint = async () => {
     if (!order) return;
     const html = buildReceiptHtml(order);
     await Print.printAsync({ html });
+  };
+
+  const handleShare = async () => {
+    if (!order) return;
+    const payment = order.payments?.[0];
+    const lines = (order.items ?? []).map((i) =>
+      `  ${i.product_name} x${i.quantity}  ${formatCurrency(parseFloat(i.subtotal))}`
+    ).join('\n');
+    const change = parseFloat(payment?.change_amount ?? 0);
+    const text = [
+      'POS 2026 – Receipt',
+      `Order: #${order.order_number}`,
+      `Date: ${formatDate(order.created_at)}`,
+      order.outlet ? `Outlet: ${order.outlet.name}` : null,
+      order.customer ? `Customer: ${order.customer.name}` : null,
+      '────────────────',
+      lines,
+      '────────────────',
+      `Subtotal: ${formatCurrency(parseFloat(order.subtotal))}`,
+      `Tax: ${formatCurrency(parseFloat(order.tax_amount))}`,
+      `Total: ${formatCurrency(parseFloat(order.total_amount))}`,
+      payment ? `Payment: ${payment.payment_method.toUpperCase()}` : null,
+      payment ? `Paid: ${formatCurrency(parseFloat(payment.amount))}` : null,
+      change > 0 ? `Change: ${formatCurrency(change)}` : null,
+      'Thank you!',
+    ].filter(Boolean).join('\n');
+    await Share.share({ message: text });
   };
 
   const handleNewSale = () => {
@@ -235,6 +275,15 @@ export default function ReceiptScreen({ route, navigation }) {
         <View style={styles.actions}>
           <Button
             mode="contained"
+            icon="whatsapp"
+            onPress={handleShare}
+            style={[styles.actionBtn, { backgroundColor: '#25D366' }]}
+            contentStyle={styles.actionBtnContent}
+          >
+            Share Receipt
+          </Button>
+          <Button
+            mode="contained"
             icon="printer"
             onPress={handlePrint}
             style={styles.actionBtn}
@@ -262,6 +311,14 @@ export default function ReceiptScreen({ route, navigation }) {
           </Button>
         </View>
       </ScrollView>
+      <Snackbar
+        visible={loyaltyMsg.length > 0}
+        onDismiss={() => setLoyaltyMsg('')}
+        duration={4000}
+        style={{ backgroundColor: '#2E7D32' }}
+      >
+        {loyaltyMsg}
+      </Snackbar>
     </View>
   );
 }

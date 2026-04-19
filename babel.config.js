@@ -1,4 +1,8 @@
 module.exports = function (api) {
+  api.cache(true);
+  return {
+    presets: ['babel-preset-expo'],
+    plugins: ['react-native-reanimated/plugin'],
   api.cache.using(() => process.env.NODE_ENV);
   const isTest = process.env.NODE_ENV === 'test';
   // babel-preset-expo is bundled inside the expo package, not installed at the top level.
