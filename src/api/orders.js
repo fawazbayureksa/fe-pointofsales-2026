@@ -45,3 +45,21 @@ export const cancelOrder = async (id, reason) => {
   const { data } = await client.post(`/orders/${id}/cancel`, reason ? { reason } : {});
   return data.data ?? data;
 };
+
+/**
+ * @param {number} id
+ * @param {{ reason: string, supervisor_id: number }} payload
+ */
+export const refundOrder = async (id, payload) => {
+  const { data } = await client.post(`/orders/${id}/refund`, payload);
+  return data.data ?? data;
+};
+
+/**
+ * @param {number} id
+ * @param {{ discount_amount: number, discount_type: 'fixed'|'percentage', supervisor_id: number }} payload
+ */
+export const applyOrderDiscount = async (id, payload) => {
+  const { data } = await client.patch(`/orders/${id}/discount`, payload);
+  return data.data ?? data;
+};

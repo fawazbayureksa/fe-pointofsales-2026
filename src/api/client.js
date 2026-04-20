@@ -22,16 +22,52 @@ client.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
-// Response interceptor – handle 401 and standardise errors
+// Listeners for global events (set from components)
+let _onSessionLocked = null;
+let _onPermissionDenied = null;
+let _onServerError = null;
+
+export function setSessionLockedHandler(fn) { _onSessionLocked = fn; }
+export function setPermissionDeniedHandler(fn) { _onPermissionDenied = fn; }
+export function setServerErrorHandler(fn) { _onServerError = fn; }
+
+// Response interceptor – handle 401 / 403 / 500 and standardise errors
 client.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401) {
-      await SecureStore.deleteItemAsync('auth_token');
-      resetTo('Auth');
+    const status = error.response?.status;
+    const body = error.response?.data;
+
+    if (status === 401) {
+      if (body?.locked === true) {
+        // Session auto-expired → PIN re-entry
+        if (_onSessionLocked) {
+          _onSessionLocked();
+        } else {
+          await SecureStore.deleteItemAsync('auth_token');
+          resetTo('Auth');
+        }
+      } else {
+        await SecureStore.deleteItemAsync('auth_token');
+        resetTo('Auth');
+      }
+    } else if (status === 403) {
+      if (_onPermissionDenied) {
+        _onPermissionDenied(body?.message || "You don't have permission to perform this action.");
+      }
+    } else if (status >= 500 || error.message === 'Network Error' || error.code === 'ERR_NETWORK') {
+      if (_onServerError) {
+        const msg =
+          error.message === 'Network Error' || error.code === 'ERR_NETWORK'
+            ? 'Unable to connect to server. Please check your connection.'
+            : error.code === 'ECONNABORTED'
+            ? 'Request timed out. Please try again.'
+            : 'Something went wrong. Please try again.';
+        _onServerError(msg);
+      }
     }
 
-    let message = error.response?.data?.message;
+    let message = body?.message;
     if (!message) {
       if (error.message === 'Network Error' || error.code === 'ERR_NETWORK') {
         message = 'Unable to connect to server. Please check your connection.';
@@ -41,9 +77,9 @@ client.interceptors.response.use(
         message = error.message || 'Something went wrong.';
       }
     }
-    const errors = error.response?.data?.errors || {};
+    const errors = body?.errors || {};
 
-    return Promise.reject({ message, errors });
+    return Promise.reject({ message, errors, status });
   },
 );
 

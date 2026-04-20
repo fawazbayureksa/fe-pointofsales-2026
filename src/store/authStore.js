@@ -4,6 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 const useAuthStore = create((set) => ({
   token: null,
   user: null, // { id, name, email, phone, roles, permissions }
+  permissions: [],
   isInitialized: false,
 
   /** Restore token from SecureStore on app boot. */
@@ -14,12 +15,22 @@ const useAuthStore = create((set) => ({
 
   setAuth: async (token, user) => {
     await SecureStore.setItemAsync('auth_token', token);
-    set({ token, user });
+    set({ token, user, permissions: user?.permissions ?? [] });
+  },
+
+  setUser: (user) => {
+    set({ user, permissions: user?.permissions ?? [] });
   },
 
   clearAuth: async () => {
     await SecureStore.deleteItemAsync('auth_token');
-    set({ token: null, user: null });
+    set({ token: null, user: null, permissions: [] });
+  },
+
+  /** Check if user has a specific permission */
+  hasPermission: (permission) => {
+    const state = useAuthStore.getState();
+    return state.permissions.includes(permission);
   },
 }));
 

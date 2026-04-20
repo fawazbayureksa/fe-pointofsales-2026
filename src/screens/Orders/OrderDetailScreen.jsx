@@ -14,16 +14,21 @@ import {
   TextInput,
   Snackbar,
   useTheme,
+  SegmentedButtons,
 } from 'react-native-paper';
-import { useOrder, useCancelOrder } from '../../hooks/useOrders';
+import { useOrder, useCancelOrder, useRefundOrder, useApplyOrderDiscount } from '../../hooks/useOrders';
 import { formatCurrency } from '../../utils/currency';
 import { formatDate } from '../../utils/date';
 import PaymentSheet from '../POS/PaymentSheet';
+import SupervisorAuthDialog from '../../components/SupervisorAuthDialog';
+import useAuthStore from '../../store/authStore';
 
 const STATUS_COLORS = {
-  pending:   { bg: '#FFF3E0', text: '#E65100' },
-  completed: { bg: '#E8F5E9', text: '#2E7D32' },
-  cancelled: { bg: '#F5F5F5', text: '#757575' },
+  pending:    { bg: '#FFF3E0', text: '#E65100' },
+  processing: { bg: '#E3F2FD', text: '#1565C0' },
+  completed:  { bg: '#E8F5E9', text: '#2E7D32' },
+  cancelled:  { bg: '#F5F5F5', text: '#757575' },
+  refunded:   { bg: '#EDE7F6', text: '#6A1B9A' },
 };
 
 function StatusBadge({ status }) {
@@ -31,7 +36,7 @@ function StatusBadge({ status }) {
   return (
     <View style={[styles.badge, { backgroundColor: c.bg }]}>
       <Text style={[styles.badgeText, { color: c.text }]}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+        {(status ?? '').charAt(0).toUpperCase() + (status ?? '').slice(1)}
       </Text>
     </View>
   );
@@ -40,31 +45,103 @@ function StatusBadge({ status }) {
 export default function OrderDetailScreen({ route, navigation }) {
   const theme = useTheme();
   const { orderId } = route.params;
+  const permissions = useAuthStore((s) => s.permissions);
 
   const { data: order, isLoading, isError, refetch } = useOrder(orderId);
 
   const [paymentSheetVisible, setPaymentSheetVisible] = useState(false);
+
+  // Cancel dialog
   const [cancelDialogVisible, setCancelDialogVisible] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
-  const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
-
   const cancelMutation = useCancelOrder();
 
-  const handlePaymentSuccess = () => {
-    setPaymentSheetVisible(false);
-    refetch();
-    setSnackbar({ visible: true, message: 'Payment successful!' });
-  };
+  // Refund flow
+  const [refundSupervisorVisible, setRefundSupervisorVisible] = useState(false);
+  const [refundDialogVisible, setRefundDialogVisible] = useState(false);
+  const [refundReason, setRefundReason] = useState('');
+  const [refundSupervisorId, setRefundSupervisorId] = useState(null);
+  const refundMutation = useRefundOrder();
 
+  // Discount flow
+  const [discountSupervisorVisible, setDiscountSupervisorVisible] = useState(false);
+  const [discountDialogVisible, setDiscountDialogVisible] = useState(false);
+  const [discountAmount, setDiscountAmount] = useState('');
+  const [discountType, setDiscountType] = useState('fixed');
+  const [discountSupervisorId, setDiscountSupervisorId] = useState(null);
+  const discountMutation = useApplyOrderDiscount();
+
+  const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
+
+  const showSnack = (message) => setSnackbar({ visible: true, message });
+
+  // ── Cancel ─────────────────────────────────────────────────────────────────
   const handleCancelConfirm = async () => {
     try {
       await cancelMutation.mutateAsync({ id: orderId, reason: cancelReason.trim() || undefined });
       setCancelDialogVisible(false);
       setCancelReason('');
       refetch();
-      setSnackbar({ visible: true, message: 'Order cancelled.' });
+      showSnack('Order cancelled.');
     } catch (err) {
-      setSnackbar({ visible: true, message: err?.message ?? 'Cancel failed.' });
+      showSnack(err?.message ?? 'Cancel failed.');
+    }
+  };
+
+  // ── Refund ─────────────────────────────────────────────────────────────────
+  const handleRefundSupervisorSuccess = (supervisorId) => {
+    setRefundSupervisorVisible(false);
+    setRefundSupervisorId(supervisorId);
+    setRefundReason('');
+    setRefundDialogVisible(true);
+  };
+
+  const handleRefundConfirm = async () => {
+    try {
+      const result = await refundMutation.mutateAsync({
+        id: orderId,
+        reason: refundReason.trim() || undefined,
+        supervisor_id: refundSupervisorId,
+      });
+      setRefundDialogVisible(false);
+      setRefundReason('');
+      setRefundSupervisorId(null);
+      refetch();
+      showSnack(`Refund successful: ${formatCurrency(parseFloat(result.payment?.amount ?? result.total_amount ?? 0))}`);
+    } catch (err) {
+      showSnack(err?.message ?? 'Refund failed.');
+    }
+  };
+
+  // ── Discount ───────────────────────────────────────────────────────────────
+  const handleDiscountSupervisorSuccess = (supervisorId) => {
+    setDiscountSupervisorVisible(false);
+    setDiscountSupervisorId(supervisorId);
+    setDiscountAmount('');
+    setDiscountType('fixed');
+    setDiscountDialogVisible(true);
+  };
+
+  const handleDiscountConfirm = async () => {
+    const amount = parseFloat(discountAmount);
+    if (isNaN(amount) || amount <= 0) {
+      showSnack('Please enter a valid discount amount.');
+      return;
+    }
+    try {
+      await discountMutation.mutateAsync({
+        id: orderId,
+        discount_amount: amount,
+        discount_type: discountType,
+        supervisor_id: discountSupervisorId,
+      });
+      setDiscountDialogVisible(false);
+      setDiscountAmount('');
+      setDiscountSupervisorId(null);
+      refetch();
+      showSnack('Discount applied.');
+    } catch (err) {
+      showSnack(err?.message ?? 'Failed to apply discount.');
     }
   };
 
@@ -86,6 +163,13 @@ export default function OrderDetailScreen({ route, navigation }) {
   }
 
   const isPending = order.status === 'pending';
+  const isCompleted = order.status === 'completed';
+  // Default to restricted (false) when permissions array hasn't loaded yet
+  const hasPermissions = permissions.length > 0;
+  const canRefund = isCompleted && order.payments?.length > 0 &&
+    (!hasPermissions || permissions.includes('refund_order'));
+  const canDiscount = isPending &&
+    (!hasPermissions || permissions.includes('discount_override'));
 
   return (
     <View style={styles.flex}>
@@ -141,7 +225,7 @@ export default function OrderDetailScreen({ route, navigation }) {
               <View style={styles.itemLeft}>
                 <Text variant="bodyMedium" style={{ fontWeight: '600' }}>{item.product_name}</Text>
                 <Text variant="bodySmall" style={{ color: '#666' }}>
-                  {formatCurrency(parseFloat(item.unit_price))} \u00d7 {item.quantity}
+                  {formatCurrency(parseFloat(item.unit_price))} × {item.quantity}
                   {parseFloat(item.discount_amount) > 0 &&
                     ` (disc ${formatCurrency(parseFloat(item.discount_amount))})`}
                 </Text>
@@ -170,6 +254,14 @@ export default function OrderDetailScreen({ route, navigation }) {
               <Text variant="bodyMedium" style={{ color: '#E05A00' }}>Discount</Text>
               <Text variant="bodyMedium" style={{ color: '#E05A00' }}>
                 -{formatCurrency(parseFloat(order.discount_amount))}
+              </Text>
+            </View>
+          )}
+          {parseFloat(order.loyalty_points_redeemed ?? 0) > 0 && (
+            <View style={styles.totalsRow}>
+              <Text variant="bodyMedium" style={{ color: '#547792' }}>Loyalty Pts</Text>
+              <Text variant="bodyMedium" style={{ color: '#547792' }}>
+                -{formatCurrency(parseFloat(order.loyalty_points_redeemed))}
               </Text>
             </View>
           )}
@@ -215,29 +307,57 @@ export default function OrderDetailScreen({ route, navigation }) {
           </>
         )}
 
-        {/* Actions for pending orders */}
-        {isPending && (
+        {/* Actions */}
+        {(isPending || canRefund) && (
           <>
             <Divider />
             <View style={styles.actions}>
-              <Button
-                mode="contained"
-                icon="cash"
-                onPress={() => setPaymentSheetVisible(true)}
-                style={[styles.actionBtn, { backgroundColor: '#547792' }]}
-                contentStyle={styles.actionBtnContent}
-              >
-                Pay Now
-              </Button>
-              <Button
-                mode="outlined"
-                icon="close-circle-outline"
-                onPress={() => setCancelDialogVisible(true)}
-                style={styles.actionBtn}
-                textColor={theme.colors.error}
-              >
-                Cancel Order
-              </Button>
+              {isPending && (
+                <>
+                  <Button
+                    mode="contained"
+                    icon="cash"
+                    onPress={() => setPaymentSheetVisible(true)}
+                    style={[styles.actionBtn, { backgroundColor: '#547792' }]}
+                    contentStyle={styles.actionBtnContent}
+                  >
+                    Pay Now
+                  </Button>
+                  {canDiscount && (
+                    <Button
+                      mode="outlined"
+                      icon="tag-outline"
+                      onPress={() => setDiscountSupervisorVisible(true)}
+                      style={styles.actionBtn}
+                      contentStyle={styles.actionBtnContent}
+                    >
+                      Add Discount
+                    </Button>
+                  )}
+                  <Button
+                    mode="outlined"
+                    icon="close-circle-outline"
+                    onPress={() => setCancelDialogVisible(true)}
+                    style={styles.actionBtn}
+                    textColor={theme.colors.error}
+                    contentStyle={styles.actionBtnContent}
+                  >
+                    Cancel Order
+                  </Button>
+                </>
+              )}
+              {canRefund && (
+                <Button
+                  mode="outlined"
+                  icon="cash-refund"
+                  onPress={() => setRefundSupervisorVisible(true)}
+                  style={styles.actionBtn}
+                  textColor="#6A1B9A"
+                  contentStyle={styles.actionBtnContent}
+                >
+                  Refund Order
+                </Button>
+              )}
             </View>
           </>
         )}
@@ -248,7 +368,7 @@ export default function OrderDetailScreen({ route, navigation }) {
         visible={paymentSheetVisible}
         order={order}
         onDismiss={() => setPaymentSheetVisible(false)}
-        onSuccess={handlePaymentSuccess}
+        onSuccess={() => { setPaymentSheetVisible(false); refetch(); showSnack('Payment successful!'); }}
       />
 
       {/* Cancel dialog */}
@@ -281,6 +401,96 @@ export default function OrderDetailScreen({ route, navigation }) {
               onPress={handleCancelConfirm}
             >
               Cancel Order
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Refund supervisor auth */}
+      <SupervisorAuthDialog
+        visible={refundSupervisorVisible}
+        action="refund"
+        onSuccess={(supervisorId) => handleRefundSupervisorSuccess(supervisorId)}
+        onCancel={() => setRefundSupervisorVisible(false)}
+      />
+
+      {/* Refund confirmation dialog */}
+      <Portal>
+        <Dialog
+          visible={refundDialogVisible}
+          onDismiss={() => { setRefundDialogVisible(false); setRefundReason(''); }}
+        >
+          <Dialog.Title>Refund Order</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium" style={{ marginBottom: 12 }}>
+              Confirm refund for order {order?.order_number}?
+            </Text>
+            <TextInput
+              label="Reason (optional)"
+              value={refundReason}
+              onChangeText={setRefundReason}
+              mode="outlined"
+              multiline
+              numberOfLines={2}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => { setRefundDialogVisible(false); setRefundReason(''); }}>
+              Back
+            </Button>
+            <Button
+              textColor="#6A1B9A"
+              loading={refundMutation.isPending}
+              onPress={handleRefundConfirm}
+            >
+              Confirm Refund
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Discount supervisor auth */}
+      <SupervisorAuthDialog
+        visible={discountSupervisorVisible}
+        action="discount_override"
+        onSuccess={(supervisorId) => handleDiscountSupervisorSuccess(supervisorId)}
+        onCancel={() => setDiscountSupervisorVisible(false)}
+      />
+
+      {/* Discount dialog */}
+      <Portal>
+        <Dialog
+          visible={discountDialogVisible}
+          onDismiss={() => { setDiscountDialogVisible(false); setDiscountAmount(''); }}
+        >
+          <Dialog.Title>Add Discount</Dialog.Title>
+          <Dialog.Content>
+            <SegmentedButtons
+              value={discountType}
+              onValueChange={setDiscountType}
+              buttons={[
+                { value: 'fixed', label: 'Fixed (Rp)' },
+                { value: 'percentage', label: 'Percentage (%)' },
+              ]}
+              style={{ marginBottom: 12 }}
+            />
+            <TextInput
+              label={discountType === 'fixed' ? 'Discount Amount (Rp)' : 'Discount (%)'}
+              value={discountAmount}
+              onChangeText={setDiscountAmount}
+              mode="outlined"
+              keyboardType="decimal-pad"
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => { setDiscountDialogVisible(false); setDiscountAmount(''); }}>
+              Cancel
+            </Button>
+            <Button
+              loading={discountMutation.isPending}
+              onPress={handleDiscountConfirm}
+            >
+              Apply
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -342,3 +552,4 @@ const styles = StyleSheet.create({
   actionBtnContent: { paddingVertical: 4 },
   errorText: { color: '#B00020', fontSize: 15 },
 });
+

@@ -31,6 +31,7 @@ import useCartStore from '../../store/cartStore';
 import useDraftStore from '../../store/draftStore';
 import { resolveImageUrl } from '../../utils/image';
 import { formatCurrency } from '../../utils/currency';
+import { getProductByBarcode } from '../../api/products';
 import PaymentSheet from './PaymentSheet';
 import DraftListSheet from './DraftListSheet';
 import BarcodeScannerModal from './BarcodeScannerModal';
@@ -307,6 +308,30 @@ export default function POSScreen({ navigation }) {
   const debounceRef = useRef(null);
   const draftSheetRef = useRef(null);
 
+  // Barcode
+  const [scannerVisible, setScannerVisible] = useState(false);
+  const [scanLoading, setScanLoading] = useState(false);
+
+  // Customer selector
+  const [customerModalVisible, setCustomerModalVisible] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+
+  // Loyalty
+  const [useLoyalty, setUseLoyalty] = useState(false);
+  const [loyaltyInput, setLoyaltyInput] = useState('');
+
+  // Order-level discount (supervisor-gated)
+  const [discountSupervisorVisible, setDiscountSupervisorVisible] = useState(false);
+  const [discountDialogVisible, setDiscountDialogVisible] = useState(false);
+  const [discountType, setDiscountType] = useState('fixed');
+  const [discountAmount, setDiscountAmount] = useState('');
+  const [discountSupervisorId, setDiscountSupervisorId] = useState(null);
+  const [appliedDiscount, setAppliedDiscount] = useState(null);
+
+  // Shift
+  const shift = useShiftStore((s) => s.shift);
+  useCurrentShift(); // initialize shift state
+
   const {
     items,
     outletId,
@@ -324,6 +349,16 @@ export default function POSScreen({ navigation }) {
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity - i.discount_amount, 0);
   const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
   const estimatedPts = customerId ? Math.floor(subtotal / 1000) : 0;
+
+  const discountValue = (() => {
+    if (!appliedDiscount) return 0;
+    if (appliedDiscount.type === 'percentage') return subtotal * (appliedDiscount.amount / 100);
+    return appliedDiscount.amount;
+  })();
+
+  const loyaltyPoints = parseInt(loyaltyInput, 10) || 0;
+  const maxLoyalty = Math.min(selectedCustomer?.loyalty_points ?? 0, subtotal - discountValue);
+  const loyaltyRedeemed = useLoyalty && selectedCustomer ? Math.min(loyaltyPoints, maxLoyalty) : 0;
 
   const {
     data: prodData,
@@ -383,11 +418,64 @@ export default function POSScreen({ navigation }) {
     setSnackbar({ visible: true, message: 'Cart saved as draft.' });
   }, [items, customerId, customerName, saveDraft, clearCart]);
 
+  const handleBarcodeScan = useCallback(async (barcode) => {
+    setScanLoading(true);
+    try {
+      const product = await getProductByBarcode(barcode);
+      handleAddProduct(product);
+    } catch (err) {
+      const status = err?.status;
+      if (status === 404) {
+        setSnackbar({ visible: true, message: `Product not found for barcode ${barcode}.` });
+      } else {
+        setSnackbar({ visible: true, message: err?.message ?? 'Barcode scan failed.' });
+      }
+    } finally {
+      setScanLoading(false);
+    }
+  }, [handleAddProduct]);
+
+  const handleSelectCustomer = useCallback((customer) => {
+    setSelectedCustomer(customer);
+    setUseLoyalty(false);
+    setLoyaltyInput('');
+  }, []);
+
+  const handleClearCustomer = useCallback(() => {
+    setSelectedCustomer(null);
+    setUseLoyalty(false);
+    setLoyaltyInput('');
+  }, []);
+
+  // Discount via supervisor
+  const handleDiscountSupervisorSuccess = (supervisorId) => {
+    setDiscountSupervisorVisible(false);
+    setDiscountSupervisorId(supervisorId);
+    setDiscountAmount('');
+    setDiscountType('fixed');
+    setDiscountDialogVisible(true);
+  };
+
+  const handleApplyDiscount = () => {
+    const amount = parseFloat(discountAmount);
+    if (isNaN(amount) || amount <= 0) {
+      setSnackbar({ visible: true, message: 'Enter a valid discount amount.' });
+      return;
+    }
+    setAppliedDiscount({ type: discountType, amount, supervisorId: discountSupervisorId });
+    setDiscountDialogVisible(false);
+    setDiscountAmount('');
+  };
+
   const createOrderMutation = useCreateOrder();
 
   const handlePlaceOrder = async () => {
     if (items.length === 0) {
       setSnackbar({ visible: true, message: 'Cart is empty.' });
+      return;
+    }
+    if (!shift) {
+      setSnackbar({ visible: true, message: 'Please start a shift before creating an order.' });
       return;
     }
     try {
@@ -399,7 +487,16 @@ export default function POSScreen({ navigation }) {
           quantity: i.quantity,
           discount_amount: i.discount_amount || undefined,
         })),
-      });
+      };
+      if (appliedDiscount) {
+        payload.discount_amount = appliedDiscount.amount;
+        payload.discount_type = appliedDiscount.type;
+        payload.supervisor_id = appliedDiscount.supervisorId;
+      }
+      if (useLoyalty && loyaltyRedeemed > 0) {
+        payload.loyalty_points_redeemed = loyaltyRedeemed;
+      }
+      const order = await createOrderMutation.mutateAsync(payload);
       setPaymentOrder(order);
     } catch (err) {
       setSnackbar({ visible: true, message: err?.message ?? 'Failed to create order.' });
@@ -409,6 +506,10 @@ export default function POSScreen({ navigation }) {
   const handlePaymentSuccess = (_payment, order) => {
     setPaymentOrder(null);
     clearCart();
+    setSelectedCustomer(null);
+    setAppliedDiscount(null);
+    setUseLoyalty(false);
+    setLoyaltyInput('');
     navigation.navigate('Receipt', { orderId: order?.id ?? paymentOrder?.id });
   };
 
@@ -570,6 +671,105 @@ export default function POSScreen({ navigation }) {
           ItemSeparatorComponent={() => <Divider />}
           contentContainerStyle={{ paddingBottom: 8 }}
           keyboardShouldPersistTaps="handled"
+          ListHeaderComponent={
+            <View style={styles.cartExtras}>
+              {/* Customer */}
+              <Divider style={{ marginBottom: 8 }} />
+              <View style={styles.cartExtraRow}>
+                <Text variant="labelMedium" style={styles.cartExtraLabel}>Customer</Text>
+                {selectedCustomer ? (
+                  <View style={styles.customerSelectedRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text variant="bodySmall" style={{ fontWeight: '700' }}>{selectedCustomer.name}</Text>
+                      {selectedCustomer.loyalty_points > 0 && (
+                        <Text variant="bodySmall" style={{ color: '#547792' }}>
+                          {Number(selectedCustomer.loyalty_points).toLocaleString('id-ID')} pts available
+                        </Text>
+                      )}
+                    </View>
+                    <TouchableOpacity onPress={handleClearCustomer}>
+                      <MaterialCommunityIcons name="close-circle" size={20} color="#888" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <Button
+                    mode="outlined"
+                    compact
+                    icon="account-plus-outline"
+                    onPress={() => setCustomerModalVisible(true)}
+                    style={styles.addCustomerBtn}
+                  >
+                    Add Customer
+                  </Button>
+                )}
+              </View>
+
+              {/* Loyalty Points */}
+              {selectedCustomer && selectedCustomer.loyalty_points > 0 && !appliedDiscount && (
+                <View style={styles.loyaltyRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text variant="labelMedium" style={styles.cartExtraLabel}>Use Loyalty Points</Text>
+                    {useLoyalty && (
+                      <TextInput
+                        value={loyaltyInput}
+                        onChangeText={(v) => {
+                          const n = parseInt(v, 10);
+                          if (!isNaN(n)) {
+                            setLoyaltyInput(String(Math.min(n, Math.floor(maxLoyalty))));
+                          } else {
+                            setLoyaltyInput(v);
+                          }
+                        }}
+                        keyboardType="number-pad"
+                        mode="outlined"
+                        dense
+                        placeholder={`Max ${Math.floor(maxLoyalty)}`}
+                        style={{ marginTop: 6 }}
+                        right={<TextInput.Affix text="pts" />}
+                      />
+                    )}
+                  </View>
+                  <Switch
+                    value={useLoyalty}
+                    onValueChange={(v) => {
+                      setUseLoyalty(v);
+                      if (v) setLoyaltyInput(String(Math.floor(maxLoyalty)));
+                      else setLoyaltyInput('');
+                    }}
+                    color={theme.colors.primary}
+                  />
+                </View>
+              )}
+
+              {/* Order-level Discount */}
+              <View style={styles.discountRow}>
+                {appliedDiscount ? (
+                  <View style={styles.discountApplied}>
+                    <MaterialCommunityIcons name="tag-check" size={16} color="#2E7D32" />
+                    <Text variant="bodySmall" style={{ color: '#2E7D32', flex: 1 }}>
+                      Discount: {appliedDiscount.type === 'fixed'
+                        ? formatCurrency(appliedDiscount.amount)
+                        : `${appliedDiscount.amount}%`}
+                    </Text>
+                    <TouchableOpacity onPress={() => { setAppliedDiscount(null); setDiscountSupervisorId(null); }}>
+                      <MaterialCommunityIcons name="close-circle" size={18} color="#888" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <Button
+                    mode="outlined"
+                    compact
+                    icon="tag-outline"
+                    onPress={() => setDiscountSupervisorVisible(true)}
+                    style={styles.addDiscountBtn}
+                  >
+                    Add Discount
+                  </Button>
+                )}
+              </View>
+              <Divider style={{ marginTop: 8 }} />
+            </View>
+          }
           ListFooterComponent={
             <View style={styles.totalsBox}>
               <View style={styles.totalsRow}>
@@ -590,7 +790,7 @@ export default function POSScreen({ navigation }) {
               <View style={styles.totalsRow}>
                 <Text variant="titleMedium" style={{ fontWeight: '700' }}>Total (est.)</Text>
                 <Text variant="titleMedium" style={{ fontWeight: '800', color: theme.colors.secondary }}>
-                  {formatCurrency(subtotal)}
+                  {formatCurrency(Math.max(0, subtotal - discountValue - loyaltyRedeemed))}
                 </Text>
               </View>
             </View>
@@ -681,6 +881,56 @@ export default function POSScreen({ navigation }) {
         onSuccess={handlePaymentSuccess}
       />
 
+      <BarcodeScannerModal
+        visible={scannerVisible}
+        onScan={handleBarcodeScan}
+        onClose={() => setScannerVisible(false)}
+      />
+
+      <CustomerSelectorModal
+        visible={customerModalVisible}
+        onSelect={handleSelectCustomer}
+        onClose={() => setCustomerModalVisible(false)}
+      />
+
+      <SupervisorAuthDialog
+        visible={discountSupervisorVisible}
+        action="discount_override"
+        onSuccess={(supervisorId) => handleDiscountSupervisorSuccess(supervisorId)}
+        onCancel={() => setDiscountSupervisorVisible(false)}
+      />
+
+      <Portal>
+        <Dialog
+          visible={discountDialogVisible}
+          onDismiss={() => setDiscountDialogVisible(false)}
+        >
+          <Dialog.Title>Add Discount</Dialog.Title>
+          <Dialog.Content>
+            <SegmentedButtons
+              value={discountType}
+              onValueChange={setDiscountType}
+              buttons={[
+                { value: 'fixed', label: 'Fixed (Rp)' },
+                { value: 'percentage', label: 'Percentage (%)' },
+              ]}
+              style={{ marginBottom: 12 }}
+            />
+            <TextInput
+              label={discountType === 'fixed' ? 'Discount Amount (Rp)' : 'Discount (%)'}
+              value={discountAmount}
+              onChangeText={setDiscountAmount}
+              mode="outlined"
+              keyboardType="decimal-pad"
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setDiscountDialogVisible(false)}>Cancel</Button>
+            <Button onPress={handleApplyDiscount}>Apply</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
       <Snackbar
         visible={snackbar.visible}
         onDismiss={() => setSnackbar({ visible: false, message: '' })}
@@ -716,6 +966,14 @@ const styles = StyleSheet.create({
   },
   draftsBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   searchbar: { margin: 10, borderRadius: 10 },
+  scanBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#EDF3F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   catScroll: { maxHeight: 44 },
   catScrollContent: { paddingHorizontal: 10, gap: 8, alignItems: 'center' },
   catChip: { marginRight: 2 },
@@ -819,4 +1077,54 @@ const styles = StyleSheet.create({
   viewCartBadge: { backgroundColor: '#94B4C1', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 1 },
   viewCartBadgeText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   viewCartTotal: { color: '#ECEFCA', fontWeight: '700', fontSize: 14 },
+  // Scanner
+  scannerWrapper: { flex: 1, backgroundColor: '#000' },
+  scannerCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  scannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scannerFrame: {
+    width: 240,
+    height: 240,
+    borderWidth: 3,
+    borderColor: '#fff',
+    borderRadius: 12,
+  },
+  scannerHint: { color: '#fff', marginTop: 16, fontSize: 14 },
+  // Customer modal
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+  customerModalSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 32,
+    maxHeight: '80%',
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#DDD',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  modalTitle: { fontWeight: '700', textAlign: 'center', marginBottom: 4 },
+  customerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#EEE',
+    gap: 8,
+  },
+  customerTierBadge: { backgroundColor: '#EDE7F6' },
 });
+

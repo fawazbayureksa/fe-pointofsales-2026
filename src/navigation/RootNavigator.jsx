@@ -18,6 +18,11 @@ import ProductDetailScreen from '../screens/Products/ProductDetailScreen';
 import ProductFormScreen from '../screens/Products/ProductFormScreen';
 import CategoryListScreen from '../screens/Categories/CategoryListScreen';
 import CategoryFormScreen from '../screens/Categories/CategoryFormScreen';
+import CustomerListScreen from '../screens/Customers/CustomerListScreen';
+import CustomerFormScreen from '../screens/Customers/CustomerFormScreen';
+import CustomerDetailScreen from '../screens/Customers/CustomerDetailScreen';
+import PaymentHistoryScreen from '../screens/Payments/PaymentHistoryScreen';
+import StockScreen from '../screens/Stock/StockScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -93,7 +98,7 @@ function OrdersStack() {
   );
 }
 
-/** Profile tab stack — includes Products & Categories management screens */
+/** Profile tab stack — includes Products, Categories, Customers, Payments, Stock */
 function ProfileStack() {
   return (
     <Stack.Navigator screenOptions={sharedStackOptions}>
@@ -133,6 +138,47 @@ function CategoriesStack() {
         options={({ route }) =>
           ({ title: route.params?.category ? 'Edit Category' : 'New Category' })
         }
+      />
+      {/* Customers */}
+      <Stack.Screen
+        name="CustomerList"
+        component={CustomerListScreen}
+        options={{ title: 'Customers' }}
+      />
+      <Stack.Screen
+        name="CustomerDetail"
+        component={CustomerDetailScreen}
+        options={{ title: 'Customer Detail' }}
+      />
+      <Stack.Screen
+        name="CustomerForm"
+        component={CustomerFormScreen}
+        options={({ route }) =>
+          ({ title: route.params?.customerId ? 'Edit Customer' : 'New Customer' })
+        }
+      />
+      {/* Orders (from customer detail) */}
+      <Stack.Screen
+        name="OrderList"
+        component={OrdersScreen}
+        options={{ title: 'Orders' }}
+      />
+      <Stack.Screen
+        name="OrderDetail"
+        component={OrderDetailScreen}
+        options={{ title: 'Order Detail' }}
+      />
+      {/* Payment History */}
+      <Stack.Screen
+        name="PaymentHistory"
+        component={PaymentHistoryScreen}
+        options={{ title: 'Payment History' }}
+      />
+      {/* Stock */}
+      <Stack.Screen
+        name="Stock"
+        component={StockScreen}
+        options={{ title: 'Stock Management' }}
       />
     </Stack.Navigator>
   );
