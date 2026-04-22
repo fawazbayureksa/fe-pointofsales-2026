@@ -8,5 +8,6 @@ import { format, parseISO } from 'date-fns';
  * @returns {string} Formatted date string
  */
 export function formatDate(isoString, fmt = 'dd/MM/yyyy HH:mm') {
+  if (!isoString) return '-';
   return format(parseISO(isoString), fmt);
 }
