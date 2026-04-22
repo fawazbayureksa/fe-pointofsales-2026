@@ -1,35 +1,22 @@
 import client from './client';
 
 /**
- * @param {{ search?: string, page?: number, per_page?: number }} [params]
+ * Search customers (uses ?all=true for unpaginated results).
+ * @param {string} search
+ * @returns {Promise<Array>}
  */
-export const getCustomers = async (params = {}) => {
-  const { data } = await client.get('/customers', { params });
-  return data;
-};
-
-/** @param {number} id */
-export const getCustomer = async (id) => {
-  const { data } = await client.get(`/customers/${id}`);
-  return data.data ?? data;
-};
-
-/** @param {object} payload */
-export const createCustomer = async (payload) => {
-  const { data } = await client.post('/customers', payload);
-  return data.data ?? data;
-};
+export async function searchCustomers(search) {
+  const response = await client.get('/customers', { params: { all: true, search } });
+  const data = response.data;
+  return Array.isArray(data) ? data : (data?.data ?? []);
+}
 
 /**
- * @param {number} id
- * @param {object} payload
+ * Create a new customer.
+ * @param {{ name: string, phone?: string, email?: string }} data
+ * @returns {Promise<Object>}
  */
-export const updateCustomer = async (id, payload) => {
-  const { data } = await client.put(`/customers/${id}`, payload);
-  return data.data ?? data;
-};
-
-/** @param {number} id */
-export const deleteCustomer = async (id) => {
-  await client.delete(`/customers/${id}`);
-};
+export async function createCustomer(data) {
+  const response = await client.post('/customers', data);
+  return response.data;
+}

@@ -28,10 +28,9 @@
     "plugins": [
       "expo-secure-store",
       [
-        "expo-image-picker",
+        "expo-camera",
         {
-          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to upload product images.",
-          "cameraPermission": "Allow $(PRODUCT_NAME) to use the camera to take product photos."
+          "cameraPermission": "Allow POS to access your camera to scan barcodes."
         }
       ]
     ]

@@ -1,51 +1,24 @@
-import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getCustomers, getCustomer, createCustomer, updateCustomer, deleteCustomer } from '../api/customers';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { searchCustomers, createCustomer } from '../api/customers';
 
-const KEY = 'customers';
-
-export function useCustomerList(params = {}) {
-  return useInfiniteQuery({
-    queryKey: [KEY, 'list', params],
-    queryFn: ({ pageParam = 1 }) => getCustomers({ ...params, page: pageParam }),
-    getNextPageParam: (lastPage) =>
-      lastPage.current_page < lastPage.last_page
-        ? lastPage.current_page + 1
-        : undefined,
-    initialPageParam: 1,
-  });
-}
-
-export function useCustomer(id) {
+/**
+ * Debounced customer search – enabled when search string is 2+ characters.
+ * @param {string} search
+ */
+export function useCustomerSearch(search) {
   return useQuery({
-    queryKey: [KEY, id],
-    queryFn: () => getCustomer(id),
-    enabled: !!id,
+    queryKey: ['customers', 'search', search],
+    queryFn: () => searchCustomers(search),
+    enabled: typeof search === 'string' && search.length >= 2,
+    staleTime: 30_000,
+    select: (data) => data.slice(0, 5),
   });
 }
 
 export function useCreateCustomer() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createCustomer,
-    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
-  });
-}
-
-export function useUpdateCustomer() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, data }) => updateCustomer(id, data),
-    onSuccess: (updated) => {
-      qc.setQueryData([KEY, updated.id], updated);
-      qc.invalidateQueries({ queryKey: [KEY] });
-    },
-  });
-}
-
-export function useDeleteCustomer() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: deleteCustomer,
-    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['customers'] }),
   });
 }
