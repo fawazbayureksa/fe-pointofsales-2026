@@ -7,7 +7,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { TextInput, Button, Text, Snackbar, Surface } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import useAuth from '../../hooks/useAuth';
 
 const PRIMARY = '#213448';

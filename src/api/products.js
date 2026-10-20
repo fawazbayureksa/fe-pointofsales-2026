@@ -53,9 +53,10 @@ function buildProductBody(data) {
  */
 export async function createProduct(data) {
   const { body, isMultipart } = buildProductBody(data);
-  const response = await client.post('/products', body, {
-    headers: isMultipart ? { 'Content-Type': 'multipart/form-data' } : undefined,
-  });
+  const config = isMultipart ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
+  const response = config
+    ? await client.post('/products', body, config)
+    : await client.post('/products', body);
   return response.data;
 }
 
@@ -66,9 +67,10 @@ export async function createProduct(data) {
  */
 export async function updateProduct(id, data) {
   const { body, isMultipart } = buildProductBody(data);
-  const response = await client.put(`/products/${id}`, body, {
-    headers: isMultipart ? { 'Content-Type': 'multipart/form-data' } : undefined,
-  });
+  const config = isMultipart ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined;
+  const response = config
+    ? await client.put(`/products/${id}`, body, config)
+    : await client.put(`/products/${id}`, body);
   return response.data;
 }
 

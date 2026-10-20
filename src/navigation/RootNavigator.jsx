@@ -2,7 +2,7 @@ import React from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import useAuthStore from '../store/authStore';
 
 // Screens
@@ -103,6 +103,11 @@ function ProfileStack() {
   return (
     <Stack.Navigator screenOptions={sharedStackOptions}>
       <Stack.Screen
+        name="ProfileHome"
+        component={ProfileScreen}
+        options={{ title: 'My Profile' }}
+      />
+      <Stack.Screen
         name="ProductList"
         component={ProductListScreen}
         options={{ title: 'Products' }}
@@ -119,14 +124,6 @@ function ProfileStack() {
           ({ title: route.params?.product ? 'Edit Product' : 'New Product' })
         }
       />
-    </Stack.Navigator>
-  );
-}
-
-/** Nested stack for the Categories tab */
-function CategoriesStack() {
-  return (
-    <Stack.Navigator screenOptions={sharedStackOptions}>
       <Stack.Screen
         name="CategoryList"
         component={CategoryListScreen}
@@ -230,15 +227,6 @@ function AppTabs() {
         }}
       />
       <Tab.Screen
-        name="Dashboard"
-        component={DashboardScreen}
-        options={{
-          ...sharedStackOptions,
-          headerShown: true,
-          title: 'Dashboard',
-        }}
-      />
-      <Tab.Screen
         name="POS"
         component={POSStack}
         options={{ headerShown: false }}
@@ -250,12 +238,8 @@ function AppTabs() {
       />
       <Tab.Screen
         name="Profile"
-        component={ProfileScreen}
-        options={{
-          ...sharedStackOptions,
-          headerShown: true,
-          title: 'My Profile',
-        }}
+        component={ProfileStack}
+        options={{ headerShown: false }}
       />
     </Tab.Navigator>
   );

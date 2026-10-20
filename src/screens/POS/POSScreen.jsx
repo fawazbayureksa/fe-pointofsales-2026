@@ -8,6 +8,10 @@ import {
   ScrollView,
   RefreshControl,
   Platform,
+  TextInput as RNTextInput,
+  KeyboardAvoidingView,
+  Switch,
+  Modal,
 } from 'react-native';
 import {
   Text,
@@ -21,20 +25,29 @@ import {
   ActivityIndicator,
   Divider,
   TextInput,
+  Portal,
+  Dialog,
+  SegmentedButtons,
 } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { Swipeable } from 'react-native-gesture-handler';
+import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useProductList } from '../../hooks/useProducts';
 import { useAllCategories } from '../../hooks/useCategories';
 import { useCreateOrder } from '../../hooks/useOrders';
 import { useCustomerSearch, useCreateCustomer } from '../../hooks/useCustomers';
+import { useCurrentShift } from '../../hooks/useShift';
 import useCartStore from '../../store/cartStore';
 import useDraftStore from '../../store/draftStore';
+import useShiftStore from '../../store/shiftStore';
 import { resolveImageUrl } from '../../utils/image';
 import { formatCurrency } from '../../utils/currency';
 import { getProductByBarcode } from '../../api/products';
 import PaymentSheet from './PaymentSheet';
 import DraftListSheet from './DraftListSheet';
 import BarcodeScannerModal from './BarcodeScannerModal';
+import SupervisorAuthDialog from '../../components/SupervisorAuthDialog';
 
 const DEBOUNCE_MS = 400;
 
@@ -294,6 +307,28 @@ function CustomerSearchBar({ customerId, customerName, onSelect, onClear }) {
 }
 
 // \u2500\u2500 POSScreen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// ── CustomerSelectorModal ────────────────────────────────────────────────────
+function CustomerSelectorModal({ visible, onSelect, onClose }) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}>
+        <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, maxHeight: '80%' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <Text variant="titleMedium">Select Customer</Text>
+            <IconButton icon="close" onPress={onClose} />
+          </View>
+          <CustomerSearchBar
+            customerId={null}
+            customerName={null}
+            onSelect={(c) => { onSelect(c); onClose(); }}
+            onClear={() => {}}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function POSScreen({ navigation }) {
   const theme = useTheme();
   const [panel, setPanel] = useState('products');
@@ -302,7 +337,6 @@ export default function POSScreen({ navigation }) {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
   const [paymentOrder, setPaymentOrder] = useState(null);
-  const [scannerVisible, setScannerVisible] = useState(false);
   const [pinnedIds, setPinnedIds] = useState([]);
   const outletIdRef = useRef(null);
   const debounceRef = useRef(null);
@@ -479,7 +513,7 @@ export default function POSScreen({ navigation }) {
       return;
     }
     try {
-      const order = await createOrderMutation.mutateAsync({
+      const payload = {
         outlet_id: outletId ?? 1,
         customer_id: customerId ?? undefined,
         items: items.map((i) => ({
@@ -879,12 +913,6 @@ export default function POSScreen({ navigation }) {
         order={paymentOrder}
         onDismiss={() => setPaymentOrder(null)}
         onSuccess={handlePaymentSuccess}
-      />
-
-      <BarcodeScannerModal
-        visible={scannerVisible}
-        onScan={handleBarcodeScan}
-        onClose={() => setScannerVisible(false)}
       />
 
       <CustomerSelectorModal
