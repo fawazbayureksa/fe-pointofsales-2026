@@ -1,12 +1,11 @@
 import React from 'react';
-import { View, ScrollView, Image, StyleSheet } from 'react-native';
+import { View, ScrollView, Image, StyleSheet, ActivityIndicator } from 'react-native';
 import {
   Text,
   Card,
   Button,
   Chip,
   Divider,
-  ActivityIndicator,
   useTheme,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';

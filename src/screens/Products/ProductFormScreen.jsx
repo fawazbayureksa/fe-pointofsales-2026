@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   ScrollView,
@@ -6,6 +6,7 @@ import {
   Modal as RNModal,
   Image,
   TouchableOpacity,
+  Platform,
 } from 'react-native';
 import {
   Text,
@@ -15,12 +16,13 @@ import {
   Divider,
   Snackbar,
   useTheme,
-  Menu,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import CategoryPicker from '../../components/CategoryPicker';
+import OutletPicker from '../../components/OutletPicker';
 import { useCreateProduct, useUpdateProduct } from '../../hooks/useProducts';
 import { useAllOutlets } from '../../hooks/useOutlets';
 import { resolveImageUrl } from '../../utils/image';
@@ -128,7 +130,7 @@ export default function ProductFormScreen({ route, navigation }) {
     }
   };
 
-  const [imageMenuVisible, setImageMenuVisible] = useState(false);
+  const [imageModalVisible, setImageModalVisible] = useState(false);
 
   const [fieldErrors, setFieldErrors] = useState({});
   const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
@@ -140,12 +142,15 @@ export default function ProductFormScreen({ route, navigation }) {
 
   // ── Categories ───────────────────────────────────────────────────────────────
   const [catPickerVisible, setCatPickerVisible] = useState(false);
-  const catLabel = form.category ?? 'Select category';
 
   // ── Outlets ──────────────────────────────────────────────────────────────────
-  const { data: outlets = [] } = useAllOutlets();
-  const [outletMenuVisible, setOutletMenuVisible] = useState(false);
-  const selectedOutletName = outlets.find((o) => o.id === form.outlet_id)?.name ?? 'Select outlet (optional)';
+  const { data: rawOutlets = [] } = useAllOutlets();
+  const outlets = useMemo(
+    () => (Array.isArray(rawOutlets) ? rawOutlets : (rawOutlets?.data ?? [])),
+    [rawOutlets],
+  );
+  const [outletPickerVisible, setOutletPickerVisible] = useState(false);
+  const selectedOutlet = outlets.find((o) => o.id === form.outlet_id) ?? null;
 
   // ── Barcode scanner ──────────────────────────────────────────────────────────
   const [permission, requestPermission] = useCameraPermissions();
@@ -235,68 +240,99 @@ export default function ProductFormScreen({ route, navigation }) {
         </Text>
         <Divider style={styles.divider} />
 
-        <View style={styles.imagePickerRow}>
-          <TouchableOpacity
-            style={styles.imagePreview}
-            onPress={() => setImageMenuVisible(true)}
-          >
-            {localImageUri ? (
-              <Image source={{ uri: localImageUri }} style={styles.imagePreviewImg} />
-            ) : existingImageUrl ? (
-              <Image source={{ uri: resolveImageUrl(existingImageUrl) }} style={styles.imagePreviewImg} />
-            ) : (
-              <View style={styles.imagePreviewPlaceholder}>
-                <MaterialCommunityIcons name="image-plus" size={36} color="#94B4C1" />
-                <Text variant="bodySmall" style={styles.imageHint}>Tap to add image</Text>
+        {localImageUri || existingImageUrl ? (
+          <View style={styles.imageCard}>
+            <TouchableOpacity
+              style={styles.imageCardThumbWrap}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setImageModalVisible(true);
+              }}
+              activeOpacity={0.85}
+            >
+              <Image
+                source={{ uri: localImageUri || resolveImageUrl(existingImageUrl) }}
+                style={styles.imageCardThumb}
+                resizeMode="cover"
+              />
+              <View style={styles.imageEditBadge}>
+                <MaterialCommunityIcons name="camera" size={13} color="#FFFFFF" />
               </View>
-            )}
+            </TouchableOpacity>
+
+            <View style={styles.imageCardDetails}>
+              <Text variant="titleSmall" style={styles.imageCardTitle}>
+                Product Photo
+              </Text>
+              <Text variant="bodySmall" style={styles.imageCardMeta}>
+                {localImageUri ? 'New photo selected' : 'Current photo from server'}
+              </Text>
+
+              <View style={styles.imageCardActions}>
+                <Button
+                  mode="outlined"
+                  compact
+                  icon="camera-flip-outline"
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setImageModalVisible(true);
+                  }}
+                  style={styles.imageActionBtn}
+                  labelStyle={{ fontSize: 12, fontWeight: '700' }}
+                >
+                  Change
+                </Button>
+                {localImageUri && (
+                  <Button
+                    mode="outlined"
+                    compact
+                    icon="trash-can-outline"
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setLocalImageUri(null);
+                    }}
+                    style={[styles.imageActionBtn, styles.imageActionBtnDanger]}
+                    textColor="#EF4444"
+                    labelStyle={{ fontSize: 12, fontWeight: '700' }}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </View>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.imageUploadDropzone}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setImageModalVisible(true);
+            }}
+            activeOpacity={0.8}
+          >
+            <View style={styles.imageUploadIconCircle}>
+              <MaterialCommunityIcons name="camera-plus-outline" size={28} color="#547792" />
+            </View>
+
+            <Text variant="titleSmall" style={styles.imageUploadTitle}>
+              Upload Product Photo
+            </Text>
+            <Text variant="bodySmall" style={styles.imageUploadSubtitle}>
+              Tap to take a photo or select from your gallery
+            </Text>
+
+            <View style={styles.imageUploadPillsRow}>
+              <View style={styles.imageUploadPill}>
+                <MaterialCommunityIcons name="camera-outline" size={14} color="#547792" />
+                <Text style={styles.imageUploadPillText}>Camera</Text>
+              </View>
+              <View style={styles.imageUploadPill}>
+                <MaterialCommunityIcons name="image-outline" size={14} color="#547792" />
+                <Text style={styles.imageUploadPillText}>Gallery</Text>
+              </View>
+            </View>
           </TouchableOpacity>
-
-          {(localImageUri || existingImageUrl) && (
-            <Button
-              mode="outlined"
-              icon="pencil-outline"
-              onPress={() => setImageMenuVisible(true)}
-              style={styles.imageEditBtn}
-            >
-              Change
-            </Button>
-          )}
-          {localImageUri && (
-            <Button
-              mode="outlined"
-              icon="close"
-              onPress={() => setLocalImageUri(null)}
-              style={styles.imageEditBtn}
-              textColor="#C62828"
-            >
-              Remove
-            </Button>
-          )}
-        </View>
-
-        <Menu
-          visible={imageMenuVisible}
-          onDismiss={() => setImageMenuVisible(false)}
-          anchor={{ x: 16, y: 160 }}
-        >
-          <Menu.Item
-            leadingIcon="camera"
-            title="Take Photo"
-            onPress={() => {
-              setImageMenuVisible(false);
-              pickImage(true);
-            }}
-          />
-          <Menu.Item
-            leadingIcon="image"
-            title="Choose from Library"
-            onPress={() => {
-              setImageMenuVisible(false);
-              pickImage(false);
-            }}
-          />
-        </Menu>
+        )}
 
         <Text variant="titleLarge" style={[styles.sectionTitle, { marginTop: 16 }]}>
           Basic Info
@@ -384,16 +420,40 @@ export default function ProductFormScreen({ route, navigation }) {
         <Divider style={styles.divider} />
 
         {/* Category picker */}
-        <Button
-          mode="outlined"
-          icon="tag-outline"
-          onPress={() => setCatPickerVisible(true)}
-          style={styles.input}
-          contentStyle={{ justifyContent: 'flex-start' }}
-        >
-          {catLabel}
-        </Button>
-        <FieldError errors={fieldErrors} field="category" />
+        <View style={styles.pickerFieldContainer}>
+          <TouchableOpacity
+            onPress={() => setCatPickerVisible(true)}
+            activeOpacity={0.8}
+          >
+            <TextInput
+              label="Category (Optional)"
+              value={form.category ?? ''}
+              placeholder="Select category"
+              mode="outlined"
+              editable={false}
+              pointerEvents="none"
+              style={styles.input}
+              left={<TextInput.Icon icon="tag-outline" color="#547792" />}
+              right={
+                form.category ? (
+                  <TextInput.Icon
+                    icon="close-circle"
+                    color="#94A3B8"
+                    onPress={(e) => {
+                      e?.stopPropagation?.();
+                      handleChange('category', null);
+                      handleChange('category_id', null);
+                    }}
+                  />
+                ) : (
+                  <TextInput.Icon icon="chevron-down" color="#547792" />
+                )
+              }
+              error={!!fieldErrors?.category}
+            />
+          </TouchableOpacity>
+          <FieldError errors={fieldErrors} field="category" />
+        </View>
 
         {!isEdit && (
           <FormTextInput
@@ -427,43 +487,44 @@ export default function ProductFormScreen({ route, navigation }) {
           keyboardType="numeric"
         />
         {!isEdit && (
-          <>
-            <Menu
-              visible={outletMenuVisible}
-              onDismiss={() => setOutletMenuVisible(false)}
-              anchor={
-                <Button
-                  mode="outlined"
-                  icon="store-outline"
-                  onPress={() => setOutletMenuVisible(true)}
-                  style={styles.input}
-                  contentStyle={{ justifyContent: 'flex-start' }}
-                >
-                  {selectedOutletName}
-                </Button>
-              }
+          <View style={styles.outletFieldContainer}>
+            <TouchableOpacity
+              onPress={() => setOutletPickerVisible(true)}
+              activeOpacity={0.8}
             >
-              <Menu.Item
-                title="None"
-                onPress={() => {
-                  handleChange('outlet_id', null);
-                  setOutletMenuVisible(false);
-                }}
+              <TextInput
+                label="Target Outlet (Optional)"
+                value={selectedOutlet ? selectedOutlet.name : ''}
+                placeholder="All Outlets / Not specific"
+                mode="outlined"
+                editable={false}
+                pointerEvents="none"
+                style={styles.input}
+                left={<TextInput.Icon icon="storefront-outline" color="#547792" />}
+                right={
+                  form.outlet_id ? (
+                    <TextInput.Icon
+                      icon="close-circle"
+                      color="#94A3B8"
+                      onPress={(e) => {
+                        e?.stopPropagation?.();
+                        handleChange('outlet_id', null);
+                      }}
+                    />
+                  ) : (
+                    <TextInput.Icon icon="chevron-down" color="#547792" />
+                  )
+                }
+                error={!!fieldErrors?.outlet_id}
               />
-              {outlets.map((o) => (
-                <Menu.Item
-                  key={o.id}
-                  title={o.name}
-                  leadingIcon={form.outlet_id === o.id ? 'check' : undefined}
-                  onPress={() => {
-                    handleChange('outlet_id', o.id);
-                    setOutletMenuVisible(false);
-                  }}
-                />
-              ))}
-            </Menu>
+            </TouchableOpacity>
             <FieldError errors={fieldErrors} field="outlet_id" />
-          </>
+            <Text variant="bodySmall" style={styles.outletHelperText}>
+              {selectedOutlet
+                ? `Initial stock will be assigned to ${selectedOutlet.name}.`
+                : 'Initial stock will not be restricted to a specific outlet.'}
+            </Text>
+          </View>
         )}
 
         <Text variant="titleLarge" style={[styles.sectionTitle, { marginTop: 16 }]}>
@@ -513,6 +574,132 @@ export default function ProductFormScreen({ route, navigation }) {
         }}
       />
 
+      {/* ── Outlet picker ─────────────────────────────────────────────────────── */}
+      <OutletPicker
+        visible={outletPickerVisible}
+        onDismiss={() => setOutletPickerVisible(false)}
+        selectedId={form.outlet_id}
+        outlets={outlets}
+        onSelect={(outlet) => {
+          handleChange('outlet_id', outlet ? outlet.id : null);
+          setOutletPickerVisible(false);
+        }}
+      />
+
+      {/* ── Image Source Selection Modal ─────────────────────────────────────── */}
+      <RNModal
+        visible={imageModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setImageModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          onPress={() => setImageModalVisible(false)}
+          activeOpacity={1}
+        />
+        <View style={styles.sheetWrapper}>
+          <View style={styles.imageActionSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeaderRow}>
+              <View style={styles.sheetHeaderTitleWrap}>
+                <MaterialCommunityIcons name="image-edit-outline" size={22} color="#547792" />
+                <Text variant="titleMedium" style={styles.sheetTitle}>
+                  Product Photo
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setImageModalVisible(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <MaterialCommunityIcons name="close" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <Text variant="bodySmall" style={styles.sheetSubtitle}>
+              Select an image source for this product
+            </Text>
+
+            <TouchableOpacity
+              style={styles.imageOptionRow}
+              onPress={() => {
+                setImageModalVisible(false);
+                pickImage(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.imageOptionIconWrap, { backgroundColor: '#EDF3F7' }]}>
+                <MaterialCommunityIcons name="camera-outline" size={22} color="#547792" />
+              </View>
+              <View style={styles.imageOptionTexts}>
+                <Text variant="bodyMedium" style={styles.imageOptionTitle}>
+                  Take Photo
+                </Text>
+                <Text variant="bodySmall" style={styles.imageOptionSubtitle}>
+                  Capture with device camera
+                </Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#94A3B8" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.imageOptionRow}
+              onPress={() => {
+                setImageModalVisible(false);
+                pickImage(false);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.imageOptionIconWrap, { backgroundColor: '#FEF3C7' }]}>
+                <MaterialCommunityIcons name="image-multiple-outline" size={22} color="#D97706" />
+              </View>
+              <View style={styles.imageOptionTexts}>
+                <Text variant="bodyMedium" style={styles.imageOptionTitle}>
+                  Choose from Library
+                </Text>
+                <Text variant="bodySmall" style={styles.imageOptionSubtitle}>
+                  Select from photo gallery
+                </Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#94A3B8" />
+            </TouchableOpacity>
+
+            {localImageUri && (
+              <TouchableOpacity
+                style={styles.imageOptionRow}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setImageModalVisible(false);
+                  setLocalImageUri(null);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.imageOptionIconWrap, { backgroundColor: '#FEE2E2' }]}>
+                  <MaterialCommunityIcons name="trash-can-outline" size={22} color="#EF4444" />
+                </View>
+                <View style={styles.imageOptionTexts}>
+                  <Text variant="bodyMedium" style={[styles.imageOptionTitle, { color: '#EF4444' }]}>
+                    Remove Selected Photo
+                  </Text>
+                  <Text variant="bodySmall" style={styles.imageOptionSubtitle}>
+                    Revert to no new photo
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
+            <Button
+              mode="outlined"
+              onPress={() => setImageModalVisible(false)}
+              style={styles.sheetCancelBtn}
+            >
+              Cancel
+            </Button>
+          </View>
+        </View>
+      </RNModal>
+
       {/* ── Barcode scanner modal ─────────────────────────────────────────────── */}
       <RNModal
         visible={scannerVisible}
@@ -556,6 +743,15 @@ const styles = StyleSheet.create({
   sectionTitle: { fontWeight: '700', marginBottom: 4 },
   divider: { marginBottom: 12 },
   input: { marginBottom: 4 },
+  pickerFieldContainer: { marginBottom: 4 },
+  outletFieldContainer: { marginBottom: 4 },
+  outletHelperText: {
+    color: '#64748B',
+    fontSize: 11,
+    marginTop: -2,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
   errorText: { color: '#B00020', fontSize: 12, marginBottom: 10, marginLeft: 4 },
   barcodeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 0 },
   barcodeInput: { flex: 1 },
@@ -571,21 +767,211 @@ const styles = StyleSheet.create({
   },
   saveBtn: { marginTop: 24, borderRadius: 8 },
   saveBtnContent: { paddingVertical: 6 },
-  imagePickerRow: { flexDirection: 'column', alignItems: 'flex-start', marginBottom: 8, gap: 8 },
-  imagePreview: {
-    width: 120,
-    height: 120,
-    borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: '#EDF3F7',
+  // Product Image Card (when image present)
+  imageCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#D0DDE3',
-    borderStyle: 'dashed',
+    borderColor: '#E2E8F0',
+    padding: 12,
+    gap: 14,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  imagePreviewImg: { width: '100%', height: '100%' },
-  imagePreviewPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 4 },
-  imageHint: { color: '#94B4C1', textAlign: 'center' },
-  imageEditBtn: { alignSelf: 'flex-start' },
+  imageCardThumbWrap: {
+    width: 90,
+    height: 90,
+    borderRadius: 12,
+    position: 'relative',
+    backgroundColor: '#F1F5F9',
+    overflow: 'hidden',
+  },
+  imageCardThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  imageEditBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: '#213448',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  imageCardDetails: {
+    flex: 1,
+    gap: 4,
+  },
+  imageCardTitle: {
+    fontWeight: '700',
+    color: '#213448',
+    fontSize: 14,
+  },
+  imageCardMeta: {
+    color: '#64748B',
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  imageCardActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  imageActionBtn: {
+    borderRadius: 8,
+    borderColor: '#CBD5E1',
+  },
+  imageActionBtnDanger: {
+    borderColor: '#FCA5A5',
+  },
+
+  // Product Image Dropzone (when empty)
+  imageUploadDropzone: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderStyle: 'dashed',
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    marginBottom: 14,
+  },
+  imageUploadIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#EDF3F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  imageUploadTitle: {
+    fontWeight: '700',
+    color: '#213448',
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  imageUploadSubtitle: {
+    color: '#64748B',
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  imageUploadPillsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  imageUploadPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 5,
+  },
+  imageUploadPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#547792',
+  },
+
+  // Image Selection Modal
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  sheetWrapper: {
+    justifyContent: 'flex-end',
+  },
+  imageActionSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 20,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#CBD5E1',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  sheetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  sheetHeaderTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sheetTitle: {
+    fontWeight: '800',
+    color: '#213448',
+    fontSize: 17,
+  },
+  sheetSubtitle: {
+    color: '#64748B',
+    fontSize: 12,
+    marginBottom: 14,
+  },
+  imageOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    gap: 12,
+  },
+  imageOptionIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageOptionTexts: {
+    flex: 1,
+  },
+  imageOptionTitle: {
+    fontWeight: '700',
+    color: '#213448',
+    fontSize: 14,
+  },
+  imageOptionSubtitle: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  sheetCancelBtn: {
+    marginTop: 12,
+    borderRadius: 8,
+    borderColor: '#CBD5E1',
+  },
   // Barcode scanner
   scannerContainer: { flex: 1, backgroundColor: '#000' },
   scannerOverlay: {

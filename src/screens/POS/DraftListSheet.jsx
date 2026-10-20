@@ -72,7 +72,9 @@ const DraftListSheet = forwardRef(function DraftListSheet(_props, ref) {
   return (
     <BottomSheetModal
       ref={ref}
+      index={1}
       snapPoints={snapPoints}
+      enableDynamicSizing={false}
       backdropComponent={renderBackdrop}
       handleIndicatorStyle={styles.handle}
       backgroundStyle={styles.sheetBg}

@@ -9,10 +9,10 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Text,
-  ActivityIndicator,
   Divider,
   FAB,
   Button,

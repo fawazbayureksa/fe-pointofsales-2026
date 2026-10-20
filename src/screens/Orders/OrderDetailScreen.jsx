@@ -3,12 +3,12 @@ import {
   View,
   ScrollView,
   StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Text,
   Button,
   Divider,
-  ActivityIndicator,
   Dialog,
   Portal,
   TextInput,

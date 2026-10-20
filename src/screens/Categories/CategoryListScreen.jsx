@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Text,
@@ -14,7 +15,6 @@ import {
   Button,
   Portal,
   Chip,
-  ActivityIndicator,
   Snackbar,
   useTheme,
   Divider,

@@ -6,6 +6,8 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Text,
@@ -13,7 +15,7 @@ import {
   Dialog,
   Portal,
   TextInput,
-  ActivityIndicator,
+  Snackbar,
   useTheme,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -30,10 +32,11 @@ import { formatDate } from '../utils/date';
  *
  * Props:
  *   shift {object|null}
+ *   loading {boolean}
  *   onShiftStarted(): void  – called after a shift is started
  *   onShiftEnded(summary): void  – called after a shift is ended
  */
-export default function ShiftBanner({ shift, onShiftStarted, onShiftEnded }) {
+export default function ShiftBanner({ shift, loading = false, onShiftStarted, onShiftEnded }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const [startVisible, setStartVisible] = useState(false);
@@ -54,11 +57,10 @@ export default function ShiftBanner({ shift, onShiftStarted, onShiftEnded }) {
   const [endNotes, setEndNotes] = useState('');
   const [endErrors, setEndErrors] = useState({});
 
-  const { data: outlets = [] } = useAllOutlets();
+  const { data: rawOutlets = [] } = useAllOutlets();
+  const outlets = Array.isArray(rawOutlets) ? rawOutlets : (rawOutlets?.data ?? []);
   const startMutation = useStartShift();
   const endMutation = useEndShift();
-
-  const selectedOutlet = outlets.find((o) => o.id === selectedOutletId);
 
   const openStartDialog = () => {
     setSelectedOutletId(outlets[0]?.id ?? null);
@@ -69,18 +71,19 @@ export default function ShiftBanner({ shift, onShiftStarted, onShiftEnded }) {
   };
 
   const handleStartShift = async () => {
-    if (!selectedOutletId) {
+    const targetOutletId = selectedOutletId ?? outlets[0]?.id;
+    if (!targetOutletId) {
       setStartErrors({ outlet_id: ['Please select an outlet.'] });
       return;
     }
-    const cash = parseFloat(startingCash);
+    const cash = startingCash.trim() === '' ? 0 : parseFloat(startingCash);
     if (isNaN(cash) || cash < 0) {
       setStartErrors({ starting_cash: ['Please enter a valid starting cash amount.'] });
       return;
     }
     try {
       await startMutation.mutateAsync({
-        outlet_id: selectedOutletId,
+        outlet_id: targetOutletId,
         starting_cash: cash,
         notes: startNotes.trim() || undefined,
       });
@@ -100,7 +103,7 @@ export default function ShiftBanner({ shift, onShiftStarted, onShiftEnded }) {
   };
 
   const handleEndShift = async () => {
-    const cash = parseFloat(endingCash);
+    const cash = endingCash.trim() === '' ? 0 : parseFloat(endingCash);
     if (isNaN(cash) || cash < 0) {
       setEndErrors({ ending_cash: ['Please enter a valid ending cash amount.'] });
       return;
@@ -111,14 +114,24 @@ export default function ShiftBanner({ shift, onShiftStarted, onShiftEnded }) {
         notes: endNotes.trim() || undefined,
       });
       setEndVisible(false);
-      setShiftSummary(result);
+      const shiftObj = result?.shift ?? result;
+      setShiftSummary(shiftObj);
       setSummaryVisible(true);
-      if (onShiftEnded) onShiftEnded(result);
+      if (onShiftEnded) onShiftEnded(shiftObj);
     } catch (err) {
       if (err?.errors) setEndErrors(err.errors);
       else setSnackError(err?.message ?? 'Failed to end shift.');
     }
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.loadingBanner, { backgroundColor: '#F1F5F9', paddingTop: insets.top + 8 }]}>
+        <ActivityIndicator size="small" color="#547792" />
+        <Text style={styles.loadingBannerText}>Checking shift status...</Text>
+      </View>
+    );
+  }
 
   if (!shift) {
     return (
@@ -136,7 +149,7 @@ export default function ShiftBanner({ shift, onShiftStarted, onShiftEnded }) {
         <StartShiftDialog
           visible={startVisible}
           outlets={outlets}
-          selectedOutletId={selectedOutletId}
+          selectedOutletId={selectedOutletId ?? outlets[0]?.id}
           onSelectOutlet={setSelectedOutletId}
           startingCash={startingCash}
           onStartingCashChange={setStartingCash}
@@ -147,6 +160,17 @@ export default function ShiftBanner({ shift, onShiftStarted, onShiftEnded }) {
           onConfirm={handleStartShift}
           onDismiss={() => setStartVisible(false)}
         />
+
+        <Portal>
+          <Snackbar
+            visible={!!snackError}
+            onDismiss={() => setSnackError('')}
+            duration={3000}
+            action={{ label: 'OK', onPress: () => setSnackError('') }}
+          >
+            {snackError}
+          </Snackbar>
+        </Portal>
       </>
     );
   }
@@ -212,6 +236,15 @@ export default function ShiftBanner({ shift, onShiftStarted, onShiftEnded }) {
             <Button onPress={() => setSummaryVisible(false)}>Close</Button>
           </Dialog.Actions>
         </Dialog>
+
+        <Snackbar
+          visible={!!snackError}
+          onDismiss={() => setSnackError('')}
+          duration={3000}
+          action={{ label: 'OK', onPress: () => setSnackError('') }}
+        >
+          {snackError}
+        </Snackbar>
       </Portal>
     </>
   );
@@ -237,69 +270,92 @@ function StartShiftDialog({
   const selectedOutlet = outlets.find((o) => o.id === selectedOutletId);
 
   return (
-    <Portal>
-      <Dialog visible={visible} onDismiss={onDismiss}>
-        <Dialog.Title>Start Shift</Dialog.Title>
-        <Dialog.Content>
-          {/* Outlet picker */}
-          <Text variant="labelMedium" style={styles.fieldLabel}>Outlet</Text>
-          <TouchableOpacity
-            style={[styles.pickerBtn, errors.outlet_id && styles.pickerBtnError]}
-            onPress={() => setMenuVisible(!menuVisible)}
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
+      <TouchableOpacity style={styles.modalBackdrop} onPress={onDismiss} activeOpacity={1} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.modalWrapper}
+      >
+        <View style={styles.modalSheet}>
+          <View style={styles.handle} />
+          <Text variant="titleMedium" style={styles.modalTitle}>Start Shift</Text>
+
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
           >
-            <Text style={{ flex: 1, color: selectedOutlet ? '#213448' : '#999' }}>
-              {selectedOutlet ? selectedOutlet.name : 'Select outlet…'}
-            </Text>
-            <MaterialCommunityIcons name="chevron-down" size={20} color="#666" />
-          </TouchableOpacity>
-          {menuVisible && (
-            <View style={styles.dropdownList}>
-              {outlets.map((o) => (
-                <TouchableOpacity
-                  key={o.id}
-                  style={styles.dropdownItem}
-                  onPress={() => { onSelectOutlet(o.id); setMenuVisible(false); }}
-                >
-                  <Text style={[styles.dropdownItemText, o.id === selectedOutletId && { color: theme.colors.primary, fontWeight: '700' }]}>
-                    {o.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            {/* Outlet picker */}
+            <Text variant="labelMedium" style={styles.fieldLabel}>Outlet</Text>
+            <TouchableOpacity
+              style={[styles.pickerBtn, errors.outlet_id && styles.pickerBtnError]}
+              onPress={() => setMenuVisible(!menuVisible)}
+            >
+              <Text style={{ flex: 1, color: selectedOutlet ? '#213448' : '#999' }}>
+                {selectedOutlet ? selectedOutlet.name : 'Select outlet…'}
+              </Text>
+              <MaterialCommunityIcons name={menuVisible ? 'chevron-up' : 'chevron-down'} size={20} color="#666" />
+            </TouchableOpacity>
+            {menuVisible && (
+              <View style={styles.dropdownList}>
+                <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
+                  {outlets.map((o) => (
+                    <TouchableOpacity
+                      key={o.id}
+                      style={styles.dropdownItem}
+                      onPress={() => { onSelectOutlet(o.id); setMenuVisible(false); }}
+                    >
+                      <Text style={[styles.dropdownItemText, o.id === selectedOutletId && { color: theme.colors.primary, fontWeight: '700' }]}>
+                        {o.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+            {errors.outlet_id ? <Text style={styles.fieldError}>{errors.outlet_id[0]}</Text> : null}
+
+            {/* Starting cash */}
+            <TextInput
+              label="Starting Cash (Rp)"
+              value={startingCash}
+              onChangeText={onStartingCashChange}
+              keyboardType="decimal-pad"
+              mode="outlined"
+              style={styles.fieldInput}
+              error={!!errors.starting_cash}
+            />
+            {errors.starting_cash ? <Text style={styles.fieldError}>{errors.starting_cash[0]}</Text> : null}
+
+            {/* Notes */}
+            <TextInput
+              label="Notes (optional)"
+              value={notes}
+              onChangeText={onNotesChange}
+              mode="outlined"
+              multiline
+              numberOfLines={2}
+              style={styles.fieldInput}
+            />
+
+            <View style={styles.modalActions}>
+              <Button onPress={onDismiss} disabled={loading} style={styles.actionBtn}>
+                Cancel
+              </Button>
+              <Button
+                mode="contained"
+                onPress={onConfirm}
+                loading={loading}
+                disabled={loading}
+                style={styles.actionBtn}
+              >
+                Start Shift
+              </Button>
             </View>
-          )}
-          {errors.outlet_id ? <Text style={styles.fieldError}>{errors.outlet_id[0]}</Text> : null}
-
-          {/* Starting cash */}
-          <TextInput
-            label="Starting Cash (Rp)"
-            value={startingCash}
-            onChangeText={onStartingCashChange}
-            keyboardType="decimal-pad"
-            mode="outlined"
-            style={styles.fieldInput}
-            error={!!errors.starting_cash}
-          />
-          {errors.starting_cash ? <Text style={styles.fieldError}>{errors.starting_cash[0]}</Text> : null}
-
-          {/* Notes */}
-          <TextInput
-            label="Notes (optional)"
-            value={notes}
-            onChangeText={onNotesChange}
-            mode="outlined"
-            multiline
-            numberOfLines={2}
-            style={styles.fieldInput}
-          />
-        </Dialog.Content>
-        <Dialog.Actions>
-          <Button onPress={onDismiss} disabled={loading}>Cancel</Button>
-          <Button mode="contained" onPress={onConfirm} loading={loading} disabled={loading}>
-            Start Shift
-          </Button>
-        </Dialog.Actions>
-      </Dialog>
-    </Portal>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -309,53 +365,74 @@ function EndShiftDialog({
   errors, loading, onConfirm, onDismiss,
 }) {
   return (
-    <Portal>
-      <Dialog visible={visible} onDismiss={onDismiss}>
-        <Dialog.Title>End Shift</Dialog.Title>
-        <Dialog.Content>
-          {shift && (
-            <View style={[styles.shiftInfoBox, { marginBottom: 16 }]}>
-              <Text variant="bodySmall" style={{ color: '#555' }}>
-                Outlet: {shift.outlet?.name ?? '-'}
-              </Text>
-              <Text variant="bodySmall" style={{ color: '#555' }}>
-                Started: {formatDate(shift.started_at)}
-              </Text>
-              <Text variant="bodySmall" style={{ color: '#555' }}>
-                Starting Cash: {formatCurrency(parseFloat(shift.starting_cash ?? 0))}
-              </Text>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
+      <TouchableOpacity style={styles.modalBackdrop} onPress={onDismiss} activeOpacity={1} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.modalWrapper}
+      >
+        <View style={styles.modalSheet}>
+          <View style={styles.handle} />
+          <Text variant="titleMedium" style={styles.modalTitle}>End Shift</Text>
+
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+          >
+            {shift && (
+              <View style={[styles.shiftInfoBox, { marginBottom: 16 }]}>
+                <Text variant="bodySmall" style={{ color: '#555' }}>
+                  Outlet: {shift.outlet?.name ?? '-'}
+                </Text>
+                <Text variant="bodySmall" style={{ color: '#555' }}>
+                  Started: {formatDate(shift.started_at)}
+                </Text>
+                <Text variant="bodySmall" style={{ color: '#555' }}>
+                  Starting Cash: {formatCurrency(parseFloat(shift.starting_cash ?? 0))}
+                </Text>
+              </View>
+            )}
+
+            <TextInput
+              label="Ending Cash (Rp)"
+              value={endingCash}
+              onChangeText={onEndingCashChange}
+              keyboardType="decimal-pad"
+              mode="outlined"
+              style={styles.fieldInput}
+              error={!!errors.ending_cash}
+            />
+            {errors.ending_cash ? <Text style={styles.fieldError}>{errors.ending_cash[0]}</Text> : null}
+
+            <TextInput
+              label="Notes (optional)"
+              value={notes}
+              onChangeText={onNotesChange}
+              mode="outlined"
+              multiline
+              numberOfLines={2}
+              style={styles.fieldInput}
+            />
+
+            <View style={styles.modalActions}>
+              <Button onPress={onDismiss} disabled={loading} style={styles.actionBtn}>
+                Cancel
+              </Button>
+              <Button
+                mode="contained"
+                onPress={onConfirm}
+                loading={loading}
+                disabled={loading}
+                style={styles.actionBtn}
+              >
+                End Shift
+              </Button>
             </View>
-          )}
-
-          <TextInput
-            label="Ending Cash (Rp)"
-            value={endingCash}
-            onChangeText={onEndingCashChange}
-            keyboardType="decimal-pad"
-            mode="outlined"
-            style={styles.fieldInput}
-            error={!!errors.ending_cash}
-          />
-          {errors.ending_cash ? <Text style={styles.fieldError}>{errors.ending_cash[0]}</Text> : null}
-
-          <TextInput
-            label="Notes (optional)"
-            value={notes}
-            onChangeText={onNotesChange}
-            mode="outlined"
-            multiline
-            numberOfLines={2}
-            style={styles.fieldInput}
-          />
-        </Dialog.Content>
-        <Dialog.Actions>
-          <Button onPress={onDismiss} disabled={loading}>Cancel</Button>
-          <Button mode="contained" onPress={onConfirm} loading={loading} disabled={loading}>
-            End Shift
-          </Button>
-        </Dialog.Actions>
-      </Dialog>
-    </Portal>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -405,6 +482,21 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginBottom: 4,
   },
+  dropdownScroll: {
+    maxHeight: 180,
+  },
+  loadingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  loadingBannerText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
   dropdownItem: { paddingHorizontal: 14, paddingVertical: 12 },
   dropdownItemText: { fontSize: 14, color: '#333' },
   shiftInfoBox: {
@@ -412,5 +504,52 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 10,
     gap: 4,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  modalWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    maxHeight: '85%',
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    backgroundColor: '#CBD5E1',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  modalTitle: {
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 14,
+    color: '#213448',
+  },
+  scrollContent: {
+    paddingBottom: 8,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  actionBtn: {
+    minWidth: 100,
   },
 });

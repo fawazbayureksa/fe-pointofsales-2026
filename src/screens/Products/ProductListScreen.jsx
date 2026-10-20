@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Image,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Text,
@@ -12,7 +13,6 @@ import {
   FAB,
   Card,
   Chip,
-  ActivityIndicator,
   Dialog,
   Portal,
   Button,

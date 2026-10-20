@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import {
   Text,
   Button,
   Divider,
-  ActivityIndicator,
   Chip,
   Snackbar,
   useTheme,

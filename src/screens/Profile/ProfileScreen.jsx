@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import {
   Text,
   Button,
@@ -10,7 +10,6 @@ import {
   Portal,
   TextInput,
   Divider,
-  ActivityIndicator,
   Snackbar,
   useTheme,
 } from 'react-native-paper';
@@ -19,20 +18,23 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getMe, updateProfile, changePassword } from '../../api/auth';
 import useAuth from '../../hooks/useAuth';
 
-/** Role → { bg, text } colour map */
-const ROLE_COLORS = {
-  admin:    { bg: '#FFEBEE', text: '#C62828' },
-  cashier:  { bg: '#E3F2FD', text: '#1565C0' },
-  manager:  { bg: '#E8F5E9', text: '#2E7D32' },
-  owner:    { bg: '#FFF8E1', text: '#F57F17' },
+/** Role → { bg, text, border, icon } configuration map */
+const ROLE_CONFIG = {
+  admin:   { bg: '#FEE2E2', text: '#B91C1C', border: '#FECACA', icon: 'shield-account' },
+  cashier: { bg: '#E0F2FE', text: '#0369A1', border: '#BAE6FD', icon: 'cash-register' },
+  manager: { bg: '#DCFCE7', text: '#15803D', border: '#BBF7D0', icon: 'account-tie' },
+  owner:   { bg: '#FEF3C7', text: '#B45309', border: '#FDE68A', icon: 'crown' },
 };
+const ROLE_COLORS = ROLE_CONFIG;
 
 function getInitials(name = '') {
-  return name
+  const initials = name
     .split(' ')
+    .filter(Boolean)
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? '')
     .join('');
+  return initials || '?';
 }
 
 function fieldLabel(key) {
@@ -165,46 +167,140 @@ export default function ProfileScreen({ navigation }) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* ── Profile card ───────────────────────────────────────────────────────── */}
-      <Card style={styles.card} elevation={2}>
-        <Card.Content style={styles.cardContent}>
-          <Avatar.Text
-            size={80}
-            label={getInitials(user?.name)}
-            style={styles.avatar}
-          />
+      <View style={styles.profileCard}>
+        {/* Banner with modern decorative accents */}
+        <View style={styles.banner}>
+          <View style={styles.bannerCircle1} />
+          <View style={styles.bannerCircle2} />
 
-          <Text variant="headlineSmall" style={styles.name}>
-            {user?.name}
-          </Text>
+          <View style={styles.bannerHeader}>
+            {user?.id != null ? (
+              <View style={styles.idBadge}>
+                <MaterialCommunityIcons name="badge-account-outline" size={13} color="#C8DCE5" />
+                <Text style={styles.idBadgeText}>ID #{user.id}</Text>
+              </View>
+            ) : (
+              <View />
+            )}
 
-          <Text variant="bodyMedium" style={styles.email}>
-            {user?.email}
-          </Text>
-
-          {user?.phone ? (
-            <Text variant="bodySmall" style={styles.phone}>
-              {user.phone}
-            </Text>
-          ) : null}
-
-          {/* Role chips */}
-          <View style={styles.chips}>
-            {user?.roles?.map((role) => {
-              const colors = ROLE_COLORS[role] ?? { bg: '#F5F5F5', text: '#616161' };
-              return (
-                <Chip
-                  key={role}
-                  compact
-                  style={[styles.chip, { backgroundColor: colors.bg }]}
-                  textStyle={{ color: colors.text, fontWeight: '700', textTransform: 'capitalize' }}
-                >
-                  {role}
-                </Chip>
-              );
-            })}
+            <TouchableOpacity
+              style={styles.editPillBtn}
+              onPress={openEditModal}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <MaterialCommunityIcons name="pencil-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.editPillText}>Edit</Text>
+            </TouchableOpacity>
           </View>
-        </Card.Content>
-      </Card>
+        </View>
+
+        {/* Profile Card Body */}
+        <View style={styles.profileBody}>
+          {/* Avatar with status indicator */}
+          <View style={styles.avatarWrapper}>
+            <Avatar.Text
+              size={76}
+              label={getInitials(user?.name)}
+              style={styles.avatar}
+              labelStyle={styles.avatarLabel}
+            />
+            <View style={styles.statusDotRing}>
+              <View style={styles.statusDot} />
+            </View>
+          </View>
+
+          {/* User Name */}
+          <Text variant="titleLarge" style={styles.userName} numberOfLines={1}>
+            {user?.name || 'User'}
+          </Text>
+
+          {/* Role Badges */}
+          {user?.roles && user.roles.length > 0 && (
+            <View style={styles.rolesContainer}>
+              {user.roles.map((role) => {
+                const conf = ROLE_CONFIG[role] ?? {
+                  bg: '#F1F5F9',
+                  text: '#475569',
+                  border: '#CBD5E1',
+                  icon: 'account-outline',
+                };
+                return (
+                  <View
+                    key={role}
+                    style={[
+                      styles.roleBadge,
+                      { backgroundColor: conf.bg, borderColor: conf.border },
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name={conf.icon}
+                      size={13}
+                      color={conf.text}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text style={[styles.roleBadgeText, { color: conf.text }]}>
+                      {role}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Contact Details (Email & Phone) */}
+          <View style={styles.contactList}>
+            {user?.email ? (
+              <View style={styles.contactChip}>
+                <View style={styles.contactIconWrap}>
+                  <MaterialCommunityIcons name="email-outline" size={14} color="#547792" />
+                </View>
+                <Text style={styles.contactValue} numberOfLines={1}>
+                  {user.email}
+                </Text>
+              </View>
+            ) : null}
+
+            {user?.phone ? (
+              <View style={styles.contactChip}>
+                <View style={styles.contactIconWrap}>
+                  <MaterialCommunityIcons name="phone-outline" size={14} color="#547792" />
+                </View>
+                <Text style={styles.contactValue} numberOfLines={1}>
+                  {user.phone}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+
+          {/* Quick Metrics / Summary Strip */}
+          {/* <View style={styles.metaStrip}>
+            <View style={styles.metaItem}>
+              <Text style={styles.metaNumber}>{user?.roles?.length ?? 1}</Text>
+              <Text style={styles.metaCaption}>Roles</Text>
+            </View>
+
+            <View style={styles.metaSep} />
+
+            <View style={styles.metaItem}>
+              <Text style={styles.metaNumber}>
+                {user?.permissions ? user.permissions.length : '—'}
+              </Text>
+              <Text style={styles.metaCaption}>Permissions</Text>
+            </View>
+
+            <View style={styles.metaSep} />
+
+            <View style={styles.metaItem}>
+              <View style={styles.statusActiveWrap}>
+                <View style={styles.activeDot} />
+                <Text style={styles.statusActiveText}>Active</Text>
+              </View>
+              <Text style={styles.metaCaption}>Status</Text>
+            </View>
+          </View> */}
+        </View>
+      </View>
 
       <Divider style={styles.divider} />
 
@@ -409,6 +505,230 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 40,
   },
+  // Profile Card
+  profileCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    overflow: 'hidden',
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#213448',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  banner: {
+    height: 76,
+    backgroundColor: '#213448',
+    position: 'relative',
+    overflow: 'hidden',
+    justifyContent: 'flex-start',
+    paddingHorizontal: 14,
+    paddingTop: 12,
+  },
+  bannerCircle1: {
+    position: 'absolute',
+    top: -30,
+    right: -20,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(84, 119, 146, 0.25)',
+  },
+  bannerCircle2: {
+    position: 'absolute',
+    bottom: -40,
+    left: 20,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  bannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 1,
+  },
+  idBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  idBadgeText: {
+    color: '#C8DCE5',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  editPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  editPillText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  profileBody: {
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  avatarWrapper: {
+    marginTop: -38,
+    marginBottom: 10,
+    position: 'relative',
+    borderRadius: 44,
+    borderWidth: 3.5,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  avatar: {
+    backgroundColor: '#547792',
+  },
+  avatarLabel: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 26,
+  },
+  statusDotRing: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 9,
+    padding: 2.5,
+  },
+  statusDot: {
+    width: 11,
+    height: 11,
+    borderRadius: 5.5,
+    backgroundColor: '#10B981',
+  },
+  userName: {
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  rolesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 14,
+  },
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 3.5,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  roleBadgeText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+    letterSpacing: 0.2,
+  },
+  contactList: {
+    width: '100%',
+    gap: 6,
+    marginBottom: 14,
+  },
+  contactChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    gap: 10,
+  },
+  contactIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: '#EDF3F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contactValue: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
+  },
+  metaStrip: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#EEF2F6',
+  },
+  metaItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  metaNumber: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#213448',
+    marginBottom: 2,
+  },
+  metaCaption: {
+    fontSize: 11,
+    color: '#8A9BA8',
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  metaSep: {
+    width: 1,
+    height: 22,
+    backgroundColor: '#E2E8F0',
+  },
+  statusActiveWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 2,
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  statusActiveText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#10B981',
+  },
+  // Backward compatibility fallback styles
   card: {
     marginBottom: 8,
     borderRadius: 12,
@@ -416,9 +736,6 @@ const styles = StyleSheet.create({
   cardContent: {
     alignItems: 'center',
     paddingVertical: 24,
-  },
-  avatar: {
-    marginBottom: 12,
   },
   name: {
     fontWeight: '700',

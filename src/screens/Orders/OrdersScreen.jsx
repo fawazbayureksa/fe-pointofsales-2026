@@ -6,11 +6,11 @@ import {
   TouchableOpacity,
   RefreshControl,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Text,
   Searchbar,
-  ActivityIndicator,
   Divider,
   useTheme,
   Button,

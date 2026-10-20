@@ -11,7 +11,7 @@ export const getCurrentShift = async () => {
  */
 export const startShift = async (payload) => {
   const { data } = await client.post('/shifts/start', payload);
-  return data.data ?? data;
+  return data.shift ?? data.data ?? data;
 };
 
 /**
@@ -19,5 +19,5 @@ export const startShift = async (payload) => {
  */
 export const endShift = async (payload) => {
   const { data } = await client.post('/shifts/end', payload);
-  return data.data ?? data;
+  return data.shift ?? data.data ?? data;
 };
