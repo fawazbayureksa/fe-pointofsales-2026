@@ -1,15 +1,14 @@
 import React from 'react';
-import { View, ScrollView, Image, StyleSheet } from 'react-native';
+import { View, ScrollView, Image, StyleSheet, ActivityIndicator } from 'react-native';
 import {
   Text,
   Card,
   Button,
   Chip,
   Divider,
-  ActivityIndicator,
   useTheme,
 } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useProduct } from '../../hooks/useProducts';
 import { formatCurrency } from '../../utils/currency';
 import { resolveImageUrl } from '../../utils/image';

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   View,
   ScrollView,
@@ -6,6 +6,8 @@ import {
   Modal as RNModal,
   Image,
   TouchableOpacity,
+  Platform,
+  SafeAreaView,
 } from 'react-native';
 import {
   Text,
@@ -15,12 +17,13 @@ import {
   Divider,
   Snackbar,
   useTheme,
-  Menu,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import CategoryPicker from '../../components/CategoryPicker';
+import OutletPicker from '../../components/OutletPicker';
 import { useCreateProduct, useUpdateProduct } from '../../hooks/useProducts';
 import { useAllOutlets } from '../../hooks/useOutlets';
 import { resolveImageUrl } from '../../utils/image';
@@ -43,10 +46,16 @@ const INITIAL_FORM = {
 };
 
 function FieldError({ errors, field }) {
-  const msg = errors?.[field];
-  if (!msg) return null;
-  const text = Array.isArray(msg) ? msg[0] : msg;
-  return <Text style={styles.errorText}>{text}</Text>;
+  if (!errors) return null;
+  const fields = Array.isArray(field) ? field : [field];
+  for (const f of fields) {
+    const msg = errors[f];
+    if (msg) {
+      const text = Array.isArray(msg) ? msg[0] : msg;
+      return <Text style={styles.errorText}>{text}</Text>;
+    }
+  }
+  return null;
 }
 
 function FormTextInput({ label, field, form, onChange, errors, ...rest }) {
@@ -97,6 +106,7 @@ export default function ProductFormScreen({ route, navigation }) {
   // localImageUri: newly picked image (local file URI)
   // existingImageUrl: image already on the server (for edit mode)
   const [localImageUri, setLocalImageUri] = useState(null);
+  const [selectedAsset, setSelectedAsset] = useState(null);
   const existingImageUrl = isEdit ? (editingProduct.image ?? null) : null;
 
   const pickImage = async (fromCamera) => {
@@ -123,12 +133,24 @@ export default function ProductFormScreen({ route, navigation }) {
           quality: 0.8,
         });
 
-    if (!result.canceled) {
-      setLocalImageUri(result.assets[0].uri);
+    if (!result.canceled && result.assets?.[0]) {
+      const asset = result.assets[0];
+      // Backend validation: 'image' => ['nullable', 'image', 'mimes:jpeg,png,webp', 'max:2048'] (2048 KB = 2 MB)
+      if (asset.fileSize && asset.fileSize > 2048 * 1024) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          image: ['The image field must not be greater than 2048 kilobytes (2MB).'],
+        }));
+        setSnackbar({ visible: true, message: 'Image size must not exceed 2MB.' });
+        return;
+      }
+      setSelectedAsset(asset);
+      setLocalImageUri(asset.uri);
+      setFieldErrors((prev) => ({ ...prev, image: undefined }));
     }
   };
 
-  const [imageMenuVisible, setImageMenuVisible] = useState(false);
+  const [imageModalVisible, setImageModalVisible] = useState(false);
 
   const [fieldErrors, setFieldErrors] = useState({});
   const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
@@ -140,18 +162,23 @@ export default function ProductFormScreen({ route, navigation }) {
 
   // ── Categories ───────────────────────────────────────────────────────────────
   const [catPickerVisible, setCatPickerVisible] = useState(false);
-  const catLabel = form.category ?? 'Select category';
 
   // ── Outlets ──────────────────────────────────────────────────────────────────
-  const { data: outlets = [] } = useAllOutlets();
-  const [outletMenuVisible, setOutletMenuVisible] = useState(false);
-  const selectedOutletName = outlets.find((o) => o.id === form.outlet_id)?.name ?? 'Select outlet (optional)';
+  const { data: rawOutlets = [] } = useAllOutlets();
+  const outlets = useMemo(
+    () => (Array.isArray(rawOutlets) ? rawOutlets : (rawOutlets?.data ?? [])),
+    [rawOutlets],
+  );
+  const [outletPickerVisible, setOutletPickerVisible] = useState(false);
+  const selectedOutlet = outlets.find((o) => o.id === form.outlet_id) ?? null;
 
   // ── Barcode scanner ──────────────────────────────────────────────────────────
   const [permission, requestPermission] = useCameraPermissions();
   const [scannerVisible, setScannerVisible] = useState(false);
+  const hasScannedRef = useRef(false);
 
   const openScanner = async () => {
+    hasScannedRef.current = false;
     if (!permission?.granted) {
       const result = await requestPermission();
       if (!result.granted) {
@@ -162,8 +189,16 @@ export default function ProductFormScreen({ route, navigation }) {
     setScannerVisible(true);
   };
 
+  const closeScanner = () => {
+    hasScannedRef.current = false;
+    setScannerVisible(false);
+  };
+
   const handleBarcodeScanned = ({ data }) => {
-    handleChange('barcode', data);
+    if (hasScannedRef.current) return;
+    hasScannedRef.current = true;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    handleChange('barcode', String(data ?? '').trim());
     setScannerVisible(false);
   };
 
@@ -175,8 +210,67 @@ export default function ProductFormScreen({ route, navigation }) {
   const handleSubmit = async () => {
     setFieldErrors({});
 
-    if (!form.name.trim()) {
-      setFieldErrors({ name: ['Name is required.'] });
+    const clientErrors = {};
+
+    // 1. name: ['required', 'string', 'max:255']
+    if (!form.name || !form.name.trim()) {
+      clientErrors.name = ['Name is required.'];
+    } else if (form.name.trim().length > 255) {
+      clientErrors.name = ['Name may not be greater than 255 characters.'];
+    }
+
+    // 2. price: ['required', 'numeric', 'min:0']
+    if (form.price === '' || form.price == null) {
+      clientErrors.price = ['Price is required.'];
+    } else {
+      const p = Number(form.price);
+      if (isNaN(p)) {
+        clientErrors.price = ['Price must be a valid number.'];
+      } else if (p < 0) {
+        clientErrors.price = ['Price must be at least 0.'];
+      }
+    }
+
+    // 3. cost_price: ['nullable', 'numeric', 'min:0']
+    if (form.cost_price !== '' && form.cost_price != null) {
+      const cp = Number(form.cost_price);
+      if (isNaN(cp)) {
+        clientErrors.cost_price = ['Cost price must be a valid number.'];
+      } else if (cp < 0) {
+        clientErrors.cost_price = ['Cost price must be at least 0.'];
+      }
+    }
+
+    // 4. stock: ['nullable', 'numeric', 'min:0']
+    if (form.stock !== '' && form.stock != null) {
+      const s = Number(form.stock);
+      if (isNaN(s)) {
+        clientErrors.stock = ['Stock must be a valid number.'];
+      } else if (s < 0) {
+        clientErrors.stock = ['Stock must be at least 0.'];
+      }
+    }
+
+    // 5. low_stock_threshold: ['nullable', 'numeric', 'min:0']
+    if (form.low_stock_threshold !== '' && form.low_stock_threshold != null) {
+      const lst = Number(form.low_stock_threshold);
+      if (isNaN(lst)) {
+        clientErrors.low_stock_threshold = ['Low stock threshold must be a valid number.'];
+      } else if (lst < 0) {
+        clientErrors.low_stock_threshold = ['Low stock threshold must be at least 0.'];
+      }
+    }
+
+    // 6. image: ['nullable', 'image', 'mimes:jpeg,png,webp', 'max:2048']
+    if (selectedAsset?.fileSize && selectedAsset.fileSize > 2048 * 1024) {
+      clientErrors.image = ['The image field must not be greater than 2048 kilobytes (2MB).'];
+    }
+
+    if (Object.keys(clientErrors).length > 0) {
+      setFieldErrors(clientErrors);
+      const firstKey = Object.keys(clientErrors)[0];
+      const firstMsg = clientErrors[firstKey][0];
+      setSnackbar({ visible: true, message: firstMsg || 'Please correct the validation errors.' });
       return;
     }
 
@@ -184,33 +278,31 @@ export default function ProductFormScreen({ route, navigation }) {
       if (isEdit) {
         const payload = {
           name:                form.name.trim()               || undefined,
-          price:               form.price                     ? parseFloat(form.price)                     : undefined,
-          cost_price:          form.cost_price                ? parseFloat(form.cost_price)                : undefined,
+          price:               form.price !== ''              ? parseFloat(form.price)                     : undefined,
+          cost_price:          form.cost_price !== ''         ? parseFloat(form.cost_price)                : undefined,
           stock:               form.stock !== ''              ? parseFloat(form.stock)                     : undefined,
           low_stock_threshold: form.low_stock_threshold !== '' ? parseFloat(form.low_stock_threshold)      : undefined,
           category:            form.category                  || undefined,
+          category_id:         form.category_id               ? form.category_id                           : undefined,
           is_active:           form.is_active,
           ...(localImageUri ? { image: localImageUri } : {}),
         };
         await updateMutation.mutateAsync({ id: editingProduct.id, data: payload });
       } else {
-        if (!form.price) {
-          setFieldErrors({ price: ['Price is required.'] });
-          return;
-        }
         const payload = {
           name:                form.name.trim(),
           sku:                 form.sku.trim()                || undefined,
           barcode:             form.barcode.trim()            || undefined,
           description:         form.description.trim()        || undefined,
           price:               parseFloat(form.price),
-          cost_price:          form.cost_price                ? parseFloat(form.cost_price)                : undefined,
+          cost_price:          form.cost_price !== ''         ? parseFloat(form.cost_price)                : undefined,
           stock:               form.stock !== ''              ? parseFloat(form.stock)                     : undefined,
           low_stock_threshold: form.low_stock_threshold !== '' ? parseFloat(form.low_stock_threshold)      : undefined,
           unit:                form.unit.trim()               || undefined,
           category:            form.category                  || undefined,
+          category_id:         form.category_id               ? form.category_id                           : undefined,
           outlet_id:           form.outlet_id                 ? form.outlet_id                             : undefined,
-          track_stock:         form.track_stock,
+          track_stock:         form.track_stock ? 'true' : 'false',
           is_active:           form.is_active,
           ...(localImageUri ? { image: localImageUri } : {}),
         };
@@ -218,8 +310,17 @@ export default function ProductFormScreen({ route, navigation }) {
       }
       navigation.goBack();
     } catch (err) {
-      if (err?.errors) {
-        setFieldErrors(err.errors);
+      const beErrors = err?.errors ?? err?.response?.data?.errors;
+      if (beErrors && Object.keys(beErrors).length > 0) {
+        setFieldErrors(beErrors);
+        const firstKey = Object.keys(beErrors)[0];
+        const firstMsg = Array.isArray(beErrors[firstKey])
+          ? beErrors[firstKey][0]
+          : beErrors[firstKey];
+        setSnackbar({
+          visible: true,
+          message: firstMsg || err?.message || 'Please check the form for errors.',
+        });
       } else {
         setSnackbar({ visible: true, message: err?.message ?? 'Save failed.' });
       }
@@ -235,68 +336,100 @@ export default function ProductFormScreen({ route, navigation }) {
         </Text>
         <Divider style={styles.divider} />
 
-        <View style={styles.imagePickerRow}>
-          <TouchableOpacity
-            style={styles.imagePreview}
-            onPress={() => setImageMenuVisible(true)}
-          >
-            {localImageUri ? (
-              <Image source={{ uri: localImageUri }} style={styles.imagePreviewImg} />
-            ) : existingImageUrl ? (
-              <Image source={{ uri: resolveImageUrl(existingImageUrl) }} style={styles.imagePreviewImg} />
-            ) : (
-              <View style={styles.imagePreviewPlaceholder}>
-                <MaterialCommunityIcons name="image-plus" size={36} color="#94B4C1" />
-                <Text variant="bodySmall" style={styles.imageHint}>Tap to add image</Text>
+        {localImageUri || existingImageUrl ? (
+          <View style={styles.imageCard}>
+            <TouchableOpacity
+              style={styles.imageCardThumbWrap}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setImageModalVisible(true);
+              }}
+              activeOpacity={0.85}
+            >
+              <Image
+                source={{ uri: localImageUri || resolveImageUrl(existingImageUrl) }}
+                style={styles.imageCardThumb}
+                resizeMode="cover"
+              />
+              <View style={styles.imageEditBadge}>
+                <MaterialCommunityIcons name="camera" size={13} color="#FFFFFF" />
               </View>
-            )}
+            </TouchableOpacity>
+
+            <View style={styles.imageCardDetails}>
+              <Text variant="titleSmall" style={styles.imageCardTitle}>
+                Product Photo
+              </Text>
+              <Text variant="bodySmall" style={styles.imageCardMeta}>
+                {localImageUri ? 'New photo selected' : 'Current photo from server'}
+              </Text>
+
+              <View style={styles.imageCardActions}>
+                <Button
+                  mode="outlined"
+                  compact
+                  icon="camera-flip-outline"
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setImageModalVisible(true);
+                  }}
+                  style={styles.imageActionBtn}
+                  labelStyle={{ fontSize: 12, fontWeight: '700' }}
+                >
+                  Change
+                </Button>
+                {localImageUri && (
+                  <Button
+                    mode="outlined"
+                    compact
+                    icon="trash-can-outline"
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setLocalImageUri(null);
+                    }}
+                    style={[styles.imageActionBtn, styles.imageActionBtnDanger]}
+                    textColor="#EF4444"
+                    labelStyle={{ fontSize: 12, fontWeight: '700' }}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </View>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.imageUploadDropzone}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setImageModalVisible(true);
+            }}
+            activeOpacity={0.8}
+          >
+            <View style={styles.imageUploadIconCircle}>
+              <MaterialCommunityIcons name="camera-plus-outline" size={28} color="#547792" />
+            </View>
+
+            <Text variant="titleSmall" style={styles.imageUploadTitle}>
+              Upload Product Photo
+            </Text>
+            <Text variant="bodySmall" style={styles.imageUploadSubtitle}>
+              Tap to take photo or choose from gallery (JPEG, PNG, WEBP, max 2MB)
+            </Text>
+
+            <View style={styles.imageUploadPillsRow}>
+              <View style={styles.imageUploadPill}>
+                <MaterialCommunityIcons name="camera-outline" size={14} color="#547792" />
+                <Text style={styles.imageUploadPillText}>Camera</Text>
+              </View>
+              <View style={styles.imageUploadPill}>
+                <MaterialCommunityIcons name="image-outline" size={14} color="#547792" />
+                <Text style={styles.imageUploadPillText}>Gallery</Text>
+              </View>
+            </View>
           </TouchableOpacity>
-
-          {(localImageUri || existingImageUrl) && (
-            <Button
-              mode="outlined"
-              icon="pencil-outline"
-              onPress={() => setImageMenuVisible(true)}
-              style={styles.imageEditBtn}
-            >
-              Change
-            </Button>
-          )}
-          {localImageUri && (
-            <Button
-              mode="outlined"
-              icon="close"
-              onPress={() => setLocalImageUri(null)}
-              style={styles.imageEditBtn}
-              textColor="#C62828"
-            >
-              Remove
-            </Button>
-          )}
-        </View>
-
-        <Menu
-          visible={imageMenuVisible}
-          onDismiss={() => setImageMenuVisible(false)}
-          anchor={{ x: 16, y: 160 }}
-        >
-          <Menu.Item
-            leadingIcon="camera"
-            title="Take Photo"
-            onPress={() => {
-              setImageMenuVisible(false);
-              pickImage(true);
-            }}
-          />
-          <Menu.Item
-            leadingIcon="image"
-            title="Choose from Library"
-            onPress={() => {
-              setImageMenuVisible(false);
-              pickImage(false);
-            }}
-          />
-        </Menu>
+        )}
+        <FieldError errors={fieldErrors} field="image" />
 
         <Text variant="titleLarge" style={[styles.sectionTitle, { marginTop: 16 }]}>
           Basic Info
@@ -309,6 +442,8 @@ export default function ProductFormScreen({ route, navigation }) {
           form={form}
           onChange={handleChange}
           errors={fieldErrors}
+          maxLength={255}
+          placeholder="Product name (max 255 chars)"
         />
 
         {!isEdit && (
@@ -368,6 +503,7 @@ export default function ProductFormScreen({ route, navigation }) {
           onChange={handleChange}
           errors={fieldErrors}
           keyboardType="decimal-pad"
+          placeholder="0 (min: 0)"
         />
         <FormTextInput
           label="Cost Price"
@@ -376,6 +512,7 @@ export default function ProductFormScreen({ route, navigation }) {
           onChange={handleChange}
           errors={fieldErrors}
           keyboardType="decimal-pad"
+          placeholder="0 (min: 0)"
         />
 
         <Text variant="titleLarge" style={[styles.sectionTitle, { marginTop: 16 }]}>
@@ -384,16 +521,40 @@ export default function ProductFormScreen({ route, navigation }) {
         <Divider style={styles.divider} />
 
         {/* Category picker */}
-        <Button
-          mode="outlined"
-          icon="tag-outline"
-          onPress={() => setCatPickerVisible(true)}
-          style={styles.input}
-          contentStyle={{ justifyContent: 'flex-start' }}
-        >
-          {catLabel}
-        </Button>
-        <FieldError errors={fieldErrors} field="category" />
+        <View style={styles.pickerFieldContainer}>
+          <TouchableOpacity
+            onPress={() => setCatPickerVisible(true)}
+            activeOpacity={0.8}
+          >
+            <TextInput
+              label="Category (Optional)"
+              value={form.category ?? ''}
+              placeholder="Select category"
+              mode="outlined"
+              editable={false}
+              pointerEvents="none"
+              style={styles.input}
+              left={<TextInput.Icon icon="tag-outline" color="#547792" />}
+              right={
+                form.category ? (
+                  <TextInput.Icon
+                    icon="close-circle"
+                    color="#94A3B8"
+                    onPress={(e) => {
+                      e?.stopPropagation?.();
+                      handleChange('category', null);
+                      handleChange('category_id', null);
+                    }}
+                  />
+                ) : (
+                  <TextInput.Icon icon="chevron-down" color="#547792" />
+                )
+              }
+              error={!!fieldErrors?.category || !!fieldErrors?.category_id}
+            />
+          </TouchableOpacity>
+          <FieldError errors={fieldErrors} field={['category', 'category_id']} />
+        </View>
 
         {!isEdit && (
           <FormTextInput
@@ -417,6 +578,7 @@ export default function ProductFormScreen({ route, navigation }) {
           onChange={handleChange}
           errors={fieldErrors}
           keyboardType="numeric"
+          placeholder="0 (min: 0)"
         />
         <FormTextInput
           label="Low Stock Threshold"
@@ -425,45 +587,47 @@ export default function ProductFormScreen({ route, navigation }) {
           onChange={handleChange}
           errors={fieldErrors}
           keyboardType="numeric"
+          placeholder="0 (min: 0)"
         />
         {!isEdit && (
-          <>
-            <Menu
-              visible={outletMenuVisible}
-              onDismiss={() => setOutletMenuVisible(false)}
-              anchor={
-                <Button
-                  mode="outlined"
-                  icon="store-outline"
-                  onPress={() => setOutletMenuVisible(true)}
-                  style={styles.input}
-                  contentStyle={{ justifyContent: 'flex-start' }}
-                >
-                  {selectedOutletName}
-                </Button>
-              }
+          <View style={styles.outletFieldContainer}>
+            <TouchableOpacity
+              onPress={() => setOutletPickerVisible(true)}
+              activeOpacity={0.8}
             >
-              <Menu.Item
-                title="None"
-                onPress={() => {
-                  handleChange('outlet_id', null);
-                  setOutletMenuVisible(false);
-                }}
+              <TextInput
+                label="Target Outlet (Optional)"
+                value={selectedOutlet ? selectedOutlet.name : ''}
+                placeholder="All Outlets / Not specific"
+                mode="outlined"
+                editable={false}
+                pointerEvents="none"
+                style={styles.input}
+                left={<TextInput.Icon icon="storefront-outline" color="#547792" />}
+                right={
+                  form.outlet_id ? (
+                    <TextInput.Icon
+                      icon="close-circle"
+                      color="#94A3B8"
+                      onPress={(e) => {
+                        e?.stopPropagation?.();
+                        handleChange('outlet_id', null);
+                      }}
+                    />
+                  ) : (
+                    <TextInput.Icon icon="chevron-down" color="#547792" />
+                  )
+                }
+                error={!!fieldErrors?.outlet_id}
               />
-              {outlets.map((o) => (
-                <Menu.Item
-                  key={o.id}
-                  title={o.name}
-                  leadingIcon={form.outlet_id === o.id ? 'check' : undefined}
-                  onPress={() => {
-                    handleChange('outlet_id', o.id);
-                    setOutletMenuVisible(false);
-                  }}
-                />
-              ))}
-            </Menu>
+            </TouchableOpacity>
             <FieldError errors={fieldErrors} field="outlet_id" />
-          </>
+            <Text variant="bodySmall" style={styles.outletHelperText}>
+              {selectedOutlet
+                ? `Initial stock will be assigned to ${selectedOutlet.name}.`
+                : 'Initial stock will not be restricted to a specific outlet.'}
+            </Text>
+          </View>
         )}
 
         <Text variant="titleLarge" style={[styles.sectionTitle, { marginTop: 16 }]}>
@@ -472,13 +636,16 @@ export default function ProductFormScreen({ route, navigation }) {
         <Divider style={styles.divider} />
 
         {!isEdit && (
-          <View style={styles.switchRow}>
-            <Text variant="bodyMedium">Track Stock</Text>
-            <Switch
-              value={form.track_stock}
-              onValueChange={(v) => handleChange('track_stock', v)}
-            />
-          </View>
+          <>
+            <View style={styles.switchRow}>
+              <Text variant="bodyMedium">Track Stock</Text>
+              <Switch
+                value={form.track_stock}
+                onValueChange={(v) => handleChange('track_stock', v)}
+              />
+            </View>
+            <FieldError errors={fieldErrors} field="track_stock" />
+          </>
         )}
 
         <View style={styles.switchRow}>
@@ -513,31 +680,199 @@ export default function ProductFormScreen({ route, navigation }) {
         }}
       />
 
-      {/* ── Barcode scanner modal ─────────────────────────────────────────────── */}
+      {/* ── Outlet picker ─────────────────────────────────────────────────────── */}
+      <OutletPicker
+        visible={outletPickerVisible}
+        onDismiss={() => setOutletPickerVisible(false)}
+        selectedId={form.outlet_id}
+        outlets={outlets}
+        onSelect={(outlet) => {
+          handleChange('outlet_id', outlet ? outlet.id : null);
+          setOutletPickerVisible(false);
+        }}
+      />
+
+      {/* ── Image Source Selection Modal ─────────────────────────────────────── */}
       <RNModal
-        visible={scannerVisible}
+        visible={imageModalVisible}
+        transparent
         animationType="slide"
-        onRequestClose={() => setScannerVisible(false)}
+        onRequestClose={() => setImageModalVisible(false)}
       >
-        <View style={styles.scannerContainer}>
-          <CameraView
-            style={StyleSheet.absoluteFillObject}
-            facing="back"
-            barcodeScannerSettings={{ barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e'] }}
-            onBarcodeScanned={handleBarcodeScanned}
-          />
-          <View style={styles.scannerOverlay}>
-            <Text style={styles.scannerHint}>Aim at a barcode to scan</Text>
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          onPress={() => setImageModalVisible(false)}
+          activeOpacity={1}
+        />
+        <View style={styles.sheetWrapper}>
+          <View style={styles.imageActionSheet}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetHeaderRow}>
+              <View style={styles.sheetHeaderTitleWrap}>
+                <MaterialCommunityIcons name="image-edit-outline" size={22} color="#547792" />
+                <Text variant="titleMedium" style={styles.sheetTitle}>
+                  Product Photo
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setImageModalVisible(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <MaterialCommunityIcons name="close" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <Text variant="bodySmall" style={styles.sheetSubtitle}>
+              Select an image source for this product
+            </Text>
+
+            <TouchableOpacity
+              style={styles.imageOptionRow}
+              onPress={() => {
+                setImageModalVisible(false);
+                pickImage(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.imageOptionIconWrap, { backgroundColor: '#EDF3F7' }]}>
+                <MaterialCommunityIcons name="camera-outline" size={22} color="#547792" />
+              </View>
+              <View style={styles.imageOptionTexts}>
+                <Text variant="bodyMedium" style={styles.imageOptionTitle}>
+                  Take Photo
+                </Text>
+                <Text variant="bodySmall" style={styles.imageOptionSubtitle}>
+                  Capture with device camera
+                </Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#94A3B8" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.imageOptionRow}
+              onPress={() => {
+                setImageModalVisible(false);
+                pickImage(false);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.imageOptionIconWrap, { backgroundColor: '#FEF3C7' }]}>
+                <MaterialCommunityIcons name="image-multiple-outline" size={22} color="#D97706" />
+              </View>
+              <View style={styles.imageOptionTexts}>
+                <Text variant="bodyMedium" style={styles.imageOptionTitle}>
+                  Choose from Library
+                </Text>
+                <Text variant="bodySmall" style={styles.imageOptionSubtitle}>
+                  Select from photo gallery
+                </Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#94A3B8" />
+            </TouchableOpacity>
+
+            {localImageUri && (
+              <TouchableOpacity
+                style={styles.imageOptionRow}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setImageModalVisible(false);
+                  setLocalImageUri(null);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.imageOptionIconWrap, { backgroundColor: '#FEE2E2' }]}>
+                  <MaterialCommunityIcons name="trash-can-outline" size={22} color="#EF4444" />
+                </View>
+                <View style={styles.imageOptionTexts}>
+                  <Text variant="bodyMedium" style={[styles.imageOptionTitle, { color: '#EF4444' }]}>
+                    Remove Selected Photo
+                  </Text>
+                  <Text variant="bodySmall" style={styles.imageOptionSubtitle}>
+                    Revert to no new photo
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
             <Button
-              mode="contained"
-              onPress={() => setScannerVisible(false)}
-              style={styles.scannerClose}
+              mode="outlined"
+              onPress={() => setImageModalVisible(false)}
+              style={styles.sheetCancelBtn}
             >
               Cancel
             </Button>
           </View>
         </View>
       </RNModal>
+
+      {/* ── Barcode scanner modal ─────────────────────────────────────────────── */}
+      {scannerVisible && (
+        <RNModal
+          visible={scannerVisible}
+          animationType="slide"
+          onRequestClose={closeScanner}
+        >
+          <SafeAreaView style={styles.scannerRoot}>
+            {/* Header */}
+            <View style={styles.scannerHeader}>
+              <TouchableOpacity onPress={closeScanner} style={styles.scannerCloseBtn}>
+                <MaterialCommunityIcons name="close" size={26} color="#fff" />
+              </TouchableOpacity>
+              <Text style={styles.scannerHeaderTitle}>Scan Barcode</Text>
+              <View style={{ width: 40 }} />
+            </View>
+
+            {!permission?.granted ? (
+              <View style={styles.permOverlay}>
+                <View style={styles.permCard}>
+                  <MaterialCommunityIcons name="camera-off" size={48} color="#94B4C1" />
+                  <Text style={styles.permTitle}>Camera Access Needed</Text>
+                  <Text style={styles.permBody}>
+                    Grant camera access to scan barcodes into the form.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.grantBtn}
+                    onPress={async () => {
+                      const res = await requestPermission();
+                      if (!res.granted) {
+                        setSnackbar({ visible: true, message: 'Camera permission denied.' });
+                      }
+                    }}
+                  >
+                    <Text style={styles.grantBtnText}>Grant Permission</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={closeScanner}>
+                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <>
+                <CameraView
+                  style={StyleSheet.absoluteFill}
+                  facing="back"
+                  barcodeScannerSettings={{
+                    barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e'],
+                  }}
+                  onBarcodeScanned={handleBarcodeScanned}
+                />
+
+                {/* Scan frame overlay */}
+                <View style={styles.scanFrame} pointerEvents="none">
+                  <View style={styles.frame}>
+                    <View style={[styles.corner, styles.cornerTL]} />
+                    <View style={[styles.corner, styles.cornerTR]} />
+                    <View style={[styles.corner, styles.cornerBL]} />
+                    <View style={[styles.corner, styles.cornerBR]} />
+                  </View>
+                  <Text style={styles.scanHint}>Align barcode within the frame</Text>
+                </View>
+              </>
+            )}
+          </SafeAreaView>
+        </RNModal>
+      )}
 
       <Snackbar
         visible={snackbar.visible}
@@ -550,12 +885,25 @@ export default function ProductFormScreen({ route, navigation }) {
   );
 }
 
+const FRAME_SIZE = 240;
+const CORNER_LEN = 28;
+const CORNER_W = 4;
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { padding: 16, paddingBottom: 48 },
   sectionTitle: { fontWeight: '700', marginBottom: 4 },
   divider: { marginBottom: 12 },
   input: { marginBottom: 4 },
+  pickerFieldContainer: { marginBottom: 4 },
+  outletFieldContainer: { marginBottom: 4 },
+  outletHelperText: {
+    color: '#64748B',
+    fontSize: 11,
+    marginTop: -2,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
   errorText: { color: '#B00020', fontSize: 12, marginBottom: 10, marginLeft: 4 },
   barcodeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 0 },
   barcodeInput: { flex: 1 },
@@ -571,38 +919,277 @@ const styles = StyleSheet.create({
   },
   saveBtn: { marginTop: 24, borderRadius: 8 },
   saveBtnContent: { paddingVertical: 6 },
-  imagePickerRow: { flexDirection: 'column', alignItems: 'flex-start', marginBottom: 8, gap: 8 },
-  imagePreview: {
-    width: 120,
-    height: 120,
-    borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: '#EDF3F7',
-    borderWidth: 1,
-    borderColor: '#D0DDE3',
-    borderStyle: 'dashed',
-  },
-  imagePreviewImg: { width: '100%', height: '100%' },
-  imagePreviewPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 4 },
-  imageHint: { color: '#94B4C1', textAlign: 'center' },
-  imageEditBtn: { alignSelf: 'flex-start' },
-  // Barcode scanner
-  scannerContainer: { flex: 1, backgroundColor: '#000' },
-  scannerOverlay: {
-    position: 'absolute',
-    bottom: 48,
-    left: 0,
-    right: 0,
+  // Product Image Card (when image present)
+  imageCard: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 12,
+    gap: 14,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  scannerHint: {
-    color: '#fff',
-    fontSize: 16,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  imageCardThumbWrap: {
+    width: 90,
+    height: 90,
+    borderRadius: 12,
+    position: 'relative',
+    backgroundColor: '#F1F5F9',
+    overflow: 'hidden',
+  },
+  imageCardThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  imageEditBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: '#213448',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  imageCardDetails: {
+    flex: 1,
+    gap: 4,
+  },
+  imageCardTitle: {
+    fontWeight: '700',
+    color: '#213448',
+    fontSize: 14,
+  },
+  imageCardMeta: {
+    color: '#64748B',
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  imageCardActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  imageActionBtn: {
     borderRadius: 8,
+    borderColor: '#CBD5E1',
   },
-  scannerClose: { paddingHorizontal: 24 },
+  imageActionBtnDanger: {
+    borderColor: '#FCA5A5',
+  },
+
+  // Product Image Dropzone (when empty)
+  imageUploadDropzone: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderStyle: 'dashed',
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    marginBottom: 14,
+  },
+  imageUploadIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#EDF3F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  imageUploadTitle: {
+    fontWeight: '700',
+    color: '#213448',
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  imageUploadSubtitle: {
+    color: '#64748B',
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  imageUploadPillsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  imageUploadPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 5,
+  },
+  imageUploadPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#547792',
+  },
+
+  // Image Selection Modal
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  sheetWrapper: {
+    justifyContent: 'flex-end',
+  },
+  imageActionSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 20,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#CBD5E1',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  sheetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  sheetHeaderTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sheetTitle: {
+    fontWeight: '800',
+    color: '#213448',
+    fontSize: 17,
+  },
+  sheetSubtitle: {
+    color: '#64748B',
+    fontSize: 12,
+    marginBottom: 14,
+  },
+  imageOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    gap: 12,
+  },
+  imageOptionIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageOptionTexts: {
+    flex: 1,
+  },
+  imageOptionTitle: {
+    fontWeight: '700',
+    color: '#213448',
+    fontSize: 14,
+  },
+  imageOptionSubtitle: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  sheetCancelBtn: {
+    marginTop: 12,
+    borderRadius: 8,
+    borderColor: '#CBD5E1',
+  },
+  // Barcode scanner
+  scannerRoot: { flex: 1, backgroundColor: '#000' },
+  scannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    zIndex: 10,
+  },
+  scannerCloseBtn: { padding: 6 },
+  scannerHeaderTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  scanFrame: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  frame: {
+    width: FRAME_SIZE,
+    height: FRAME_SIZE,
+    position: 'relative',
+  },
+  corner: {
+    position: 'absolute',
+    width: CORNER_LEN,
+    height: CORNER_LEN,
+    borderColor: '#fff',
+  },
+  cornerTL: { top: 0, left: 0, borderTopWidth: CORNER_W, borderLeftWidth: CORNER_W },
+  cornerTR: { top: 0, right: 0, borderTopWidth: CORNER_W, borderRightWidth: CORNER_W },
+  cornerBL: { bottom: 0, left: 0, borderBottomWidth: CORNER_W, borderLeftWidth: CORNER_W },
+  cornerBR: { bottom: 0, right: 0, borderBottomWidth: CORNER_W, borderRightWidth: CORNER_W },
+  scanHint: {
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 20,
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  permOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  permCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 28,
+    margin: 32,
+    alignItems: 'center',
+    gap: 8,
+  },
+  permTitle: { fontSize: 17, fontWeight: '700', color: '#213448', marginTop: 8 },
+  permBody: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 8 },
+  grantBtn: {
+    backgroundColor: '#547792',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    marginTop: 8,
+    width: '100%',
+    alignItems: 'center',
+  },
+  grantBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  cancelBtn: { paddingVertical: 10, marginTop: 4 },
+  cancelBtnText: { color: '#547792', fontWeight: '600', fontSize: 14 },
 });

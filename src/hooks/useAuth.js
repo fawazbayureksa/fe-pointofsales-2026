@@ -5,11 +5,39 @@ import * as authApi from '../api/auth';
 /**
  * Convenience hook that wraps authStore state with API-calling actions.
  *
- * @returns {{ user: import('../types/auth').User|null, token: string|null, login: Function, logout: Function, isLoading: boolean }}
+ * @returns {{ user: import('../types/auth').User|null, token: string|null, tenant: import('../types/auth').Tenant|null, outlet: import('../types/auth').Outlet|null, login: Function, loginWithPin: Function, register: Function, logout: Function, isLoading: boolean }}
  */
 export default function useAuth() {
-  const { token, user, setAuth, setUser, clearAuth } = useAuthStore();
+  const { token, user, tenant, outlet, setAuth, setUser, clearAuth } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
+
+  /**
+   * Register a new Tenant, admin user, and default outlet.
+   * Persists returned token + user + tenant + outlet into authStore.
+   * Throws a standardised error object { message, errors } on failure.
+   * @param {import('../types/auth').RegisterData} data
+   * @returns {Promise<import('../types/auth').RegisterResponse>}
+   */
+  async function register(data) {
+    setIsLoading(true);
+    try {
+      const response = await authApi.register(data);
+      await setAuth(response.token, response.user, {
+        tenant: response.tenant,
+        outlet: response.outlet,
+      });
+      // Fetch full user profile (includes permissions) in background
+      try {
+        const me = await authApi.getMe();
+        setUser(me.data ?? me);
+      } catch (_) {
+        // non-fatal
+      }
+      return response;
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   /**
    * Call the login API and persist the returned token + user.
@@ -69,5 +97,5 @@ export default function useAuth() {
     }
   }
 
-  return { user, token, login, loginWithPin, logout, isLoading };
+  return { user, token, tenant, outlet, login, loginWithPin, register, logout, isLoading };
 }

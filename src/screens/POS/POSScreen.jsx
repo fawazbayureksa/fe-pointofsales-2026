@@ -8,6 +8,7 @@ import {
   ScrollView,
   RefreshControl,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Text,
@@ -15,35 +16,36 @@ import {
   Chip,
   Button,
   Badge,
-  IconButton,
   Snackbar,
   useTheme,
-  ActivityIndicator,
-  Divider,
   TextInput,
+  Portal,
+  Dialog,
+  SegmentedButtons,
 } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useProductList } from '../../hooks/useProducts';
 import { useAllCategories } from '../../hooks/useCategories';
 import { useCreateOrder } from '../../hooks/useOrders';
-import { useCustomerSearch, useCreateCustomer } from '../../hooks/useCustomers';
+import { useCurrentShift } from '../../hooks/useShift';
 import useCartStore from '../../store/cartStore';
 import useDraftStore from '../../store/draftStore';
+import useShiftStore from '../../store/shiftStore';
 import { resolveImageUrl } from '../../utils/image';
 import { formatCurrency } from '../../utils/currency';
 import { getProductByBarcode } from '../../api/products';
 import PaymentSheet from './PaymentSheet';
 import DraftListSheet from './DraftListSheet';
 import BarcodeScannerModal from './BarcodeScannerModal';
+import SupervisorAuthDialog from '../../components/SupervisorAuthDialog';
+import ShiftBanner from '../../components/ShiftBanner';
+import CartPanel from './CartPanel';
 
 const DEBOUNCE_MS = 400;
 
-// ── Tier helpers ──────────────────────────────────────────────────────────────
-const TIER_COLORS = { regular: '#9CA3AF', silver: '#64748B', gold: '#D97706', platinum: '#7C3AED' };
-function tierColor(tier) {
-  return TIER_COLORS[tier?.toLowerCase()] ?? TIER_COLORS.regular;
-}
-
+// ── ProductCard ───────────────────────────────────────────────────────────────
 function ProductCard({ product, onAdd, onLongPress, isPinned }) {
   const theme = useTheme();
   const imgUri = resolveImageUrl(product.image);
@@ -86,7 +88,11 @@ function PinnedProductRow({ pinnedIds, products, onAdd, onUnpin }) {
   return (
     <View style={styles.pinnedRow}>
       <Text variant="labelSmall" style={styles.pinnedTitle}>Favourites</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pinnedScroll}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.pinnedScrollContent}
+      >
         {pinned.map((p) => {
           const imgUri = resolveImageUrl(p.image);
           return (
@@ -114,186 +120,7 @@ function PinnedProductRow({ pinnedIds, products, onAdd, onUnpin }) {
   );
 }
 
-// \u2500\u2500 CartItemRow (swipe-left to delete) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-function CartItemRow({ item, onRemove, onQtyChange }) {
-  const renderRightActions = () => (
-    <TouchableOpacity style={styles.swipeDelete} onPress={() => onRemove(item.product_id)}>
-      <MaterialCommunityIcons name="trash-can-outline" size={22} color="#fff" />
-    </TouchableOpacity>
-  );
-  return (
-    <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
-      <View style={styles.cartRow}>
-        <View style={styles.cartRowLeft}>
-          <Text variant="bodyMedium" style={styles.cartItemName} numberOfLines={1}>
-            {item.name}
-          </Text>
-          <Text variant="bodySmall" style={styles.cartItemPrice}>
-            {formatCurrency(item.price)} {'\u00d7'} {item.quantity}
-            {item.discount_amount > 0 && (
-              <Text style={styles.discountLabel}> (disc {formatCurrency(item.discount_amount)})</Text>
-            )}
-          </Text>
-        </View>
-        <View style={styles.cartRowRight}>
-          <TouchableOpacity
-            style={styles.qtyBtn}
-            onPress={() => onQtyChange(item.product_id, item.quantity - 1)}
-          >
-            <Text style={styles.qtyBtnText}>{'\u2212'}</Text>
-          </TouchableOpacity>
-          <Text style={styles.qtyText}>{item.quantity}</Text>
-          <TouchableOpacity
-            style={styles.qtyBtn}
-            onPress={() => onQtyChange(item.product_id, item.quantity + 1)}
-          >
-            <Text style={styles.qtyBtnText}>+</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Swipeable>
-  );
-}
-
-// \u2500\u2500 CustomerSearchBar \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-function CustomerSearchBar({ customerId, customerName, onSelect, onClear }) {
-  const [query, setQuery] = useState('');
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
-  const [debouncedQ, setDebouncedQ] = useState('');
-  const [newName, setNewName] = useState('');
-  const [newPhone, setNewPhone] = useState('');
-  const debRef = useRef(null);
-
-  const { data: results = [], isFetching } = useCustomerSearch(debouncedQ);
-  const createMutation = useCreateCustomer();
-
-  const handleQueryChange = (text) => {
-    setQuery(text);
-    if (debRef.current) clearTimeout(debRef.current);
-    debRef.current = setTimeout(() => {
-      setDebouncedQ(text);
-      setShowDropdown(text.length >= 2);
-    }, 350);
-  };
-
-  const handleSelect = (customer) => {
-    onSelect(customer);
-    setQuery('');
-    setDebouncedQ('');
-    setShowDropdown(false);
-  };
-
-  const handleClear = () => {
-    onClear();
-    setQuery('');
-    setDebouncedQ('');
-    setShowDropdown(false);
-  };
-
-  const handleCreateSubmit = async () => {
-    if (!newName.trim()) return;
-    try {
-      const c = await createMutation.mutateAsync({
-        name: newName.trim(),
-        phone: newPhone.trim() || undefined,
-      });
-      handleSelect(c);
-      setShowCreate(false);
-      setNewName('');
-      setNewPhone('');
-    } catch (_) {}
-  };
-
-  if (customerId) {
-    const initials = (customerName ?? '?')
-      .split(' ')
-      .slice(0, 2)
-      .map((w) => (w[0] ?? '').toUpperCase())
-      .join('');
-    return (
-      <View style={styles.memberCard}>
-        <View style={[styles.memberAvatar, { backgroundColor: tierColor(undefined) }]}>
-          <Text style={styles.memberInitials}>{initials}</Text>
-        </View>
-        <View style={styles.memberInfo}>
-          <Text variant="bodyMedium" style={styles.memberName}>{customerName}</Text>
-        </View>
-        <TouchableOpacity onPress={handleClear} style={{ padding: 4 }}>
-          <MaterialCommunityIcons name="close-circle" size={20} color="#94B4C1" />
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  return (
-    <View>
-      <View style={styles.custSearchRow}>
-        <MaterialCommunityIcons name="account-search-outline" size={18} color="#94B4C1" style={{ marginRight: 6 }} />
-        <RNTextInput
-          style={styles.custSearchInput}
-          placeholder="Search customer..."
-          placeholderTextColor="#94A3B8"
-          value={query}
-          onChangeText={handleQueryChange}
-          onFocus={() => query.length >= 2 && setShowDropdown(true)}
-          onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-          returnKeyType="search"
-        />
-        {isFetching && <ActivityIndicator size={14} color="#94B4C1" />}
-      </View>
-      {showDropdown && (
-        <View style={styles.dropdown}>
-          {results.map((c) => (
-            <TouchableOpacity key={c.id} style={styles.dropdownRow} onPress={() => handleSelect(c)}>
-              <View style={{ flex: 1 }}>
-                <Text variant="bodyMedium" style={styles.dropdownName}>{c.name}</Text>
-                {c.phone ? <Text variant="bodySmall" style={{ color: '#64748B' }}>{c.phone}</Text> : null}
-              </View>
-              {c.loyalty_points != null && (
-                <View style={styles.pointsBadge}>
-                  <Text style={styles.pointsBadgeText}>{c.loyalty_points} pts</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          ))}
-          <TouchableOpacity
-            style={styles.dropdownNew}
-            onPress={() => { setShowDropdown(false); setShowCreate(true); }}
-          >
-            <MaterialCommunityIcons name="account-plus-outline" size={16} color="#547792" />
-            <Text style={styles.dropdownNewText}>New Customer</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-      {showCreate && (
-        <View style={styles.quickCreateOverlay}>
-          <View style={styles.quickCreateCard}>
-            <Text variant="titleSmall" style={{ fontWeight: '700', color: '#213448', marginBottom: 8 }}>
-              New Customer
-            </Text>
-            <TextInput value={newName} onChangeText={setNewName} mode="outlined" label="Name *" style={{ marginBottom: 8 }} autoFocus />
-            <TextInput value={newPhone} onChangeText={setNewPhone} mode="outlined" label="Phone" keyboardType="phone-pad" style={{ marginBottom: 8 }} />
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Button mode="outlined" onPress={() => setShowCreate(false)} style={{ flex: 1 }}>Cancel</Button>
-              <Button
-                mode="contained"
-                onPress={handleCreateSubmit}
-                loading={createMutation.isPending}
-                disabled={!newName.trim() || createMutation.isPending}
-                style={{ flex: 1 }}
-              >
-                Save
-              </Button>
-            </View>
-          </View>
-        </View>
-      )}
-    </View>
-  );
-}
-
-// \u2500\u2500 POSScreen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// ── POSScreen ─────────────────────────────────────────────────────────────────
 export default function POSScreen({ navigation }) {
   const theme = useTheme();
   const [panel, setPanel] = useState('products');
@@ -302,7 +129,6 @@ export default function POSScreen({ navigation }) {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [snackbar, setSnackbar] = useState({ visible: false, message: '' });
   const [paymentOrder, setPaymentOrder] = useState(null);
-  const [scannerVisible, setScannerVisible] = useState(false);
   const [pinnedIds, setPinnedIds] = useState([]);
   const outletIdRef = useRef(null);
   const debounceRef = useRef(null);
@@ -312,8 +138,7 @@ export default function POSScreen({ navigation }) {
   const [scannerVisible, setScannerVisible] = useState(false);
   const [scanLoading, setScanLoading] = useState(false);
 
-  // Customer selector
-  const [customerModalVisible, setCustomerModalVisible] = useState(false);
+  // Customer
   const [selectedCustomer, setSelectedCustomer] = useState(null);
 
   // Loyalty
@@ -330,6 +155,7 @@ export default function POSScreen({ navigation }) {
 
   // Shift
   const shift = useShiftStore((s) => s.shift);
+  const isShiftInitialized = useShiftStore((s) => s.isInitialized);
   useCurrentShift(); // initialize shift state
 
   const {
@@ -338,27 +164,38 @@ export default function POSScreen({ navigation }) {
     customerId,
     customerName,
     addItem,
-    removeItem,
-    updateQuantity,
     clearCart,
     setCustomer,
+    setOutlet,
   } = useCartStore();
+
+  // Sync outletId with active shift
+  useEffect(() => {
+    const shiftOutletId = shift?.outlet_id ?? shift?.outlet?.id;
+    if (shiftOutletId) {
+      setOutlet(shiftOutletId);
+    }
+  }, [shift, setOutlet]);
 
   const { drafts, saveDraft } = useDraftStore();
 
-  const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity - i.discount_amount, 0);
+  const subtotal = items.reduce(
+    (sum, i) => sum + i.price * i.quantity - (i.discount_amount || 0),
+    0,
+  );
   const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
-  const estimatedPts = customerId ? Math.floor(subtotal / 1000) : 0;
 
   const discountValue = (() => {
     if (!appliedDiscount) return 0;
-    if (appliedDiscount.type === 'percentage') return subtotal * (appliedDiscount.amount / 100);
+    if (appliedDiscount.type === 'percentage') return (subtotal * appliedDiscount.amount) / 100;
     return appliedDiscount.amount;
   })();
 
   const loyaltyPoints = parseInt(loyaltyInput, 10) || 0;
   const maxLoyalty = Math.min(selectedCustomer?.loyalty_points ?? 0, subtotal - discountValue);
   const loyaltyRedeemed = useLoyalty && selectedCustomer ? Math.min(loyaltyPoints, maxLoyalty) : 0;
+
+  const activeOutletId = shift?.outlet_id ?? shift?.outlet?.id ?? outletId;
 
   const {
     data: prodData,
@@ -371,6 +208,7 @@ export default function POSScreen({ navigation }) {
   } = useProductList({
     search: appliedSearch || undefined,
     category: selectedCategory ?? undefined,
+    outlet_id: activeOutletId || undefined,
     is_active: true,
   });
   const products = prodData?.pages.flatMap((p) => p.data ?? []) ?? [];
@@ -381,7 +219,11 @@ export default function POSScreen({ navigation }) {
   useEffect(() => {
     outletIdRef.current = outletId;
     AsyncStorage.getItem(`pinned_products_${outletId}`).then((raw) => {
-      if (raw) { try { setPinnedIds(JSON.parse(raw)); } catch (_) {} }
+      if (raw) {
+        try {
+          setPinnedIds(JSON.parse(raw));
+        } catch (_) {}
+      }
     });
   }, [outletId]);
 
@@ -418,34 +260,83 @@ export default function POSScreen({ navigation }) {
     setSnackbar({ visible: true, message: 'Cart saved as draft.' });
   }, [items, customerId, customerName, saveDraft, clearCart]);
 
-  const handleBarcodeScan = useCallback(async (barcode) => {
-    setScanLoading(true);
-    try {
-      const product = await getProductByBarcode(barcode);
-      handleAddProduct(product);
-    } catch (err) {
-      const status = err?.status;
-      if (status === 404) {
-        setSnackbar({ visible: true, message: `Product not found for barcode ${barcode}.` });
-      } else {
-        setSnackbar({ visible: true, message: err?.message ?? 'Barcode scan failed.' });
-      }
-    } finally {
-      setScanLoading(false);
-    }
-  }, [handleAddProduct]);
+  const handleBarcodeScan = useCallback(
+    async (barcode) => {
+      setScanLoading(true);
+      try {
+        const code = String(barcode || '').trim();
+        const unpaddedCode = code.replace(/^0+/, '');
 
-  const handleSelectCustomer = useCallback((customer) => {
-    setSelectedCustomer(customer);
-    setUseLoyalty(false);
-    setLoyaltyInput('');
-  }, []);
+        let product = products.find((p) => {
+          const b = String(p.barcode || '').trim();
+          return b && (b === code || (unpaddedCode && b === unpaddedCode));
+        });
+
+        if (!product) {
+          try {
+            product = await getProductByBarcode(code);
+          } catch (err) {
+            if (code !== unpaddedCode && unpaddedCode.length > 0) {
+              product = await getProductByBarcode(unpaddedCode);
+            } else {
+              throw err;
+            }
+          }
+        }
+
+        if (!product) {
+          setSnackbar({ visible: true, message: `Product not found for barcode ${barcode}.` });
+          return;
+        }
+
+        let currentStock = null;
+        if (product.stock !== undefined && product.stock !== null) {
+          currentStock = Number(product.stock);
+        } else if (Array.isArray(product.outlets) && activeOutletId) {
+          const matchOutlet = product.outlets.find((o) => o.id === activeOutletId);
+          const outletStock = matchOutlet?.pivot?.stock ?? matchOutlet?.stock;
+          if (outletStock !== undefined && outletStock !== null) {
+            currentStock = Number(outletStock);
+          }
+        }
+
+        if (product.track_stock && currentStock !== null && !isNaN(currentStock) && currentStock <= 0) {
+          setSnackbar({ visible: true, message: `${product.name} is out of stock.` });
+          return;
+        }
+
+        return product;
+      } catch (err) {
+        const status = err?.status ?? err?.response?.status;
+        if (status === 404) {
+          setSnackbar({ visible: true, message: `Product not found for barcode ${barcode}.` });
+        } else {
+          setSnackbar({ visible: true, message: err?.message ?? 'Barcode scan failed.' });
+        }
+        throw err;
+      } finally {
+        setScanLoading(false);
+      }
+    },
+    [products, activeOutletId],
+  );
+
+  const handleSelectCustomer = useCallback(
+    (customer) => {
+      setSelectedCustomer(customer);
+      setCustomer(customer ? customer.id : null, customer ? customer.name : null);
+      setUseLoyalty(false);
+      setLoyaltyInput('');
+    },
+    [setCustomer],
+  );
 
   const handleClearCustomer = useCallback(() => {
     setSelectedCustomer(null);
+    setCustomer(null, null);
     setUseLoyalty(false);
     setLoyaltyInput('');
-  }, []);
+  }, [setCustomer]);
 
   // Discount via supervisor
   const handleDiscountSupervisorSuccess = (supervisorId) => {
@@ -479,8 +370,8 @@ export default function POSScreen({ navigation }) {
       return;
     }
     try {
-      const order = await createOrderMutation.mutateAsync({
-        outlet_id: outletId ?? 1,
+      const payload = {
+        outlet_id: shift?.outlet_id ?? shift?.outlet?.id ?? outletId ?? 1,
         customer_id: customerId ?? undefined,
         items: items.map((i) => ({
           product_id: i.product_id,
@@ -525,11 +416,15 @@ export default function POSScreen({ navigation }) {
     [handleAddProduct, handleTogglePin, pinnedIds],
   );
 
-  // \u2500\u2500 Products Panel \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  // ── Products Panel ──────────────────────────────────────────────────────────
   const ProductPanel = (
     <View style={styles.flex}>
       {itemCount > 0 && (
-        <TouchableOpacity style={styles.viewCartBtn} onPress={() => setPanel('cart')} activeOpacity={0.85}>
+        <TouchableOpacity
+          style={styles.viewCartBtn}
+          onPress={() => setPanel('cart')}
+          activeOpacity={0.85}
+        >
           <MaterialCommunityIcons name="cart" size={18} color="#fff" style={{ marginRight: 6 }} />
           <Text style={styles.viewCartText}>View Cart</Text>
           <View style={styles.viewCartBadge}>
@@ -551,7 +446,12 @@ export default function POSScreen({ navigation }) {
         style={styles.catScroll}
         contentContainerStyle={styles.catScrollContent}
       >
-        <Chip selected={selectedCategory === null} onPress={() => setSelectedCategory(null)} style={styles.catChip} compact>
+        <Chip
+          selected={selectedCategory === null}
+          onPress={() => setSelectedCategory(null)}
+          style={styles.catChip}
+          compact
+        >
           All
         </Chip>
         {categories.map((cat) => (
@@ -610,213 +510,26 @@ export default function POSScreen({ navigation }) {
         />
       )}
       {/* Barcode FAB */}
-      <TouchableOpacity style={styles.scanFab} onPress={() => setScannerVisible(true)} activeOpacity={0.85}>
+      <TouchableOpacity
+        style={styles.scanFab}
+        onPress={() => setScannerVisible(true)}
+        activeOpacity={0.85}
+      >
         <MaterialCommunityIcons name="barcode-scan" size={24} color="#fff" />
       </TouchableOpacity>
     </View>
   );
 
-  // \u2500\u2500 Cart Panel \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-  const CartPanel = (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
-    >
-      {/* Cart header with Hold button */}
-      <View style={styles.cartHeader}>
-        <Text variant="titleSmall" style={styles.cartHeaderTitle}>Cart</Text>
-        <View style={{ flexDirection: 'row' }}>
-          {items.length > 0 && (
-            <IconButton icon="pause-circle-outline" size={22} iconColor="#547792" onPress={handleHoldCart} style={{ margin: 0 }} />
-          )}
-          <IconButton
-            icon="trash-can-outline"
-            size={22}
-            iconColor="#EF4444"
-            onPress={() => { clearCart(); setPanel('products'); }}
-            style={{ margin: 0 }}
-            disabled={items.length === 0}
-          />
-        </View>
-      </View>
-
-      {/* Inline customer search */}
-      <View style={styles.custSection}>
-        <CustomerSearchBar
-          customerId={customerId}
-          customerName={customerName}
-          onSelect={(c) => setCustomer(c.id, c.name)}
-          onClear={() => setCustomer(null, null)}
-        />
-      </View>
-
-      <Divider />
-
-      {items.length === 0 ? (
-        <View style={[styles.center, styles.flex]}>
-          <MaterialCommunityIcons name="cart-outline" size={48} color="#94B4C1" />
-          <Text style={styles.emptyText}>Cart is empty</Text>
-          <Button mode="outlined" onPress={() => setPanel('products')} style={{ marginTop: 12 }}>
-            Browse Products
-          </Button>
-        </View>
-      ) : (
-        <FlatList
-          data={items}
-          keyExtractor={(item) => String(item.product_id)}
-          renderItem={({ item }) => (
-            <CartItemRow item={item} onRemove={removeItem} onQtyChange={updateQuantity} />
-          )}
-          ItemSeparatorComponent={() => <Divider />}
-          contentContainerStyle={{ paddingBottom: 8 }}
-          keyboardShouldPersistTaps="handled"
-          ListHeaderComponent={
-            <View style={styles.cartExtras}>
-              {/* Customer */}
-              <Divider style={{ marginBottom: 8 }} />
-              <View style={styles.cartExtraRow}>
-                <Text variant="labelMedium" style={styles.cartExtraLabel}>Customer</Text>
-                {selectedCustomer ? (
-                  <View style={styles.customerSelectedRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text variant="bodySmall" style={{ fontWeight: '700' }}>{selectedCustomer.name}</Text>
-                      {selectedCustomer.loyalty_points > 0 && (
-                        <Text variant="bodySmall" style={{ color: '#547792' }}>
-                          {Number(selectedCustomer.loyalty_points).toLocaleString('id-ID')} pts available
-                        </Text>
-                      )}
-                    </View>
-                    <TouchableOpacity onPress={handleClearCustomer}>
-                      <MaterialCommunityIcons name="close-circle" size={20} color="#888" />
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <Button
-                    mode="outlined"
-                    compact
-                    icon="account-plus-outline"
-                    onPress={() => setCustomerModalVisible(true)}
-                    style={styles.addCustomerBtn}
-                  >
-                    Add Customer
-                  </Button>
-                )}
-              </View>
-
-              {/* Loyalty Points */}
-              {selectedCustomer && selectedCustomer.loyalty_points > 0 && !appliedDiscount && (
-                <View style={styles.loyaltyRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text variant="labelMedium" style={styles.cartExtraLabel}>Use Loyalty Points</Text>
-                    {useLoyalty && (
-                      <TextInput
-                        value={loyaltyInput}
-                        onChangeText={(v) => {
-                          const n = parseInt(v, 10);
-                          if (!isNaN(n)) {
-                            setLoyaltyInput(String(Math.min(n, Math.floor(maxLoyalty))));
-                          } else {
-                            setLoyaltyInput(v);
-                          }
-                        }}
-                        keyboardType="number-pad"
-                        mode="outlined"
-                        dense
-                        placeholder={`Max ${Math.floor(maxLoyalty)}`}
-                        style={{ marginTop: 6 }}
-                        right={<TextInput.Affix text="pts" />}
-                      />
-                    )}
-                  </View>
-                  <Switch
-                    value={useLoyalty}
-                    onValueChange={(v) => {
-                      setUseLoyalty(v);
-                      if (v) setLoyaltyInput(String(Math.floor(maxLoyalty)));
-                      else setLoyaltyInput('');
-                    }}
-                    color={theme.colors.primary}
-                  />
-                </View>
-              )}
-
-              {/* Order-level Discount */}
-              <View style={styles.discountRow}>
-                {appliedDiscount ? (
-                  <View style={styles.discountApplied}>
-                    <MaterialCommunityIcons name="tag-check" size={16} color="#2E7D32" />
-                    <Text variant="bodySmall" style={{ color: '#2E7D32', flex: 1 }}>
-                      Discount: {appliedDiscount.type === 'fixed'
-                        ? formatCurrency(appliedDiscount.amount)
-                        : `${appliedDiscount.amount}%`}
-                    </Text>
-                    <TouchableOpacity onPress={() => { setAppliedDiscount(null); setDiscountSupervisorId(null); }}>
-                      <MaterialCommunityIcons name="close-circle" size={18} color="#888" />
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <Button
-                    mode="outlined"
-                    compact
-                    icon="tag-outline"
-                    onPress={() => setDiscountSupervisorVisible(true)}
-                    style={styles.addDiscountBtn}
-                  >
-                    Add Discount
-                  </Button>
-                )}
-              </View>
-              <Divider style={{ marginTop: 8 }} />
-            </View>
-          }
-          ListFooterComponent={
-            <View style={styles.totalsBox}>
-              <View style={styles.totalsRow}>
-                <Text variant="bodyMedium" style={styles.totalsLabel}>Items</Text>
-                <Text variant="bodyMedium">{itemCount}</Text>
-              </View>
-              <View style={styles.totalsRow}>
-                <Text variant="bodyMedium" style={styles.totalsLabel}>Subtotal</Text>
-                <Text variant="bodyMedium" style={styles.totalsValue}>{formatCurrency(subtotal)}</Text>
-              </View>
-              {estimatedPts > 0 && (
-                <View style={styles.loyaltyPreview}>
-                  <MaterialCommunityIcons name="star-outline" size={14} color="#D97706" />
-                  <Text style={styles.loyaltyPreviewText}>+{estimatedPts} loyalty points to earn</Text>
-                </View>
-              )}
-              <Divider style={{ marginVertical: 8 }} />
-              <View style={styles.totalsRow}>
-                <Text variant="titleMedium" style={{ fontWeight: '700' }}>Total (est.)</Text>
-                <Text variant="titleMedium" style={{ fontWeight: '800', color: theme.colors.secondary }}>
-                  {formatCurrency(Math.max(0, subtotal - discountValue - loyaltyRedeemed))}
-                </Text>
-              </View>
-            </View>
-          }
-        />
-      )}
-
-      {/* Sticky Place Order — always above keyboard */}
-      <View style={styles.stickyOrder}>
-        <Button
-          mode="contained"
-          onPress={handlePlaceOrder}
-          loading={createOrderMutation.isPending}
-          disabled={createOrderMutation.isPending || items.length === 0}
-          style={styles.placeOrderBtn}
-          contentStyle={styles.placeOrderContent}
-          labelStyle={{ fontSize: 16, fontWeight: '700' }}
-        >
-          Place Order
-        </Button>
-      </View>
-    </KeyboardAvoidingView>
-  );
-
   return (
     <View style={styles.flex}>
+      {/* Shift Banner */}
+      <ShiftBanner
+        shift={shift}
+        loading={!isShiftInitialized}
+        onShiftStarted={() => setSnackbar({ visible: true, message: 'Shift started successfully.' })}
+        onShiftEnded={() => setSnackbar({ visible: true, message: 'Shift ended successfully.' })}
+      />
+
       {/* Segment bar + Drafts icon */}
       <View style={[styles.segmentBar, { backgroundColor: theme.colors.secondary }]}>
         <TouchableOpacity
@@ -848,12 +561,17 @@ export default function POSScreen({ navigation }) {
               Cart
             </Text>
             {itemCount > 0 && (
-              <Badge style={styles.cartBadge} size={18}>{itemCount}</Badge>
+              <Badge style={styles.cartBadge} size={18}>
+                {itemCount}
+              </Badge>
             )}
           </View>
         </TouchableOpacity>
         {/* Drafts button */}
-        <TouchableOpacity style={styles.draftsButton} onPress={() => draftSheetRef.current?.present()}>
+        <TouchableOpacity
+          style={styles.draftsButton}
+          onPress={() => draftSheetRef.current?.present()}
+        >
           <MaterialCommunityIcons name="playlist-edit" size={20} color="rgba(255,255,255,0.85)" />
           {drafts.length > 0 && (
             <View style={styles.draftsBadge}>
@@ -863,14 +581,40 @@ export default function POSScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {panel === 'products' ? ProductPanel : CartPanel}
+      {/* Panels */}
+      {panel === 'products' ? (
+        ProductPanel
+      ) : (
+        <CartPanel
+          onBrowseProducts={() => setPanel('products')}
+          onHoldCart={handleHoldCart}
+          onPlaceOrder={handlePlaceOrder}
+          isPlacingOrder={createOrderMutation.isPending}
+          shift={shift}
+          selectedCustomer={selectedCustomer}
+          onSelectCustomer={handleSelectCustomer}
+          onClearCustomer={handleClearCustomer}
+          appliedDiscount={appliedDiscount}
+          onOpenDiscount={() => setDiscountSupervisorVisible(true)}
+          onRemoveDiscount={() => {
+            setAppliedDiscount(null);
+            setDiscountSupervisorId(null);
+          }}
+          useLoyalty={useLoyalty}
+          setUseLoyalty={setUseLoyalty}
+          loyaltyInput={loyaltyInput}
+          setLoyaltyInput={setLoyaltyInput}
+        />
+      )}
 
       <DraftListSheet ref={draftSheetRef} />
 
       <BarcodeScannerModal
         visible={scannerVisible}
         products={products}
+        outletId={activeOutletId}
         onAdd={handleAddProduct}
+        onScan={handleBarcodeScan}
         onDismiss={() => setScannerVisible(false)}
       />
 
@@ -879,18 +623,6 @@ export default function POSScreen({ navigation }) {
         order={paymentOrder}
         onDismiss={() => setPaymentOrder(null)}
         onSuccess={handlePaymentSuccess}
-      />
-
-      <BarcodeScannerModal
-        visible={scannerVisible}
-        onScan={handleBarcodeScan}
-        onClose={() => setScannerVisible(false)}
-      />
-
-      <CustomerSelectorModal
-        visible={customerModalVisible}
-        onSelect={handleSelectCustomer}
-        onClose={() => setCustomerModalVisible(false)}
       />
 
       <SupervisorAuthDialog
@@ -942,7 +674,6 @@ export default function POSScreen({ navigation }) {
   );
 }
 
-
 const CARD_GAP = 8;
 
 const styles = StyleSheet.create({
@@ -960,171 +691,114 @@ const styles = StyleSheet.create({
   cartBadge: { backgroundColor: '#94B4C1' },
   draftsButton: { width: 44, height: '100%', alignItems: 'center', justifyContent: 'center' },
   draftsBadge: {
-    position: 'absolute', top: 6, right: 4, backgroundColor: '#EF4444',
-    borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center',
-    justifyContent: 'center', paddingHorizontal: 3,
+    position: 'absolute',
+    top: 6,
+    right: 4,
+    backgroundColor: '#EF4444',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
   },
   draftsBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   searchbar: { margin: 10, borderRadius: 10 },
-  scanBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#EDF3F7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   catScroll: { maxHeight: 44 },
   catScrollContent: { paddingHorizontal: 10, gap: 8, alignItems: 'center' },
   catChip: { marginRight: 2 },
   pinnedRow: { paddingHorizontal: 10, paddingVertical: 6 },
   pinnedTitle: { fontSize: 12, fontWeight: '600', color: '#547792', marginBottom: 4 },
   pinnedScrollContent: { gap: 8 },
-  pinnedCard: { width: 80, backgroundColor: '#fff', borderRadius: 10, overflow: 'hidden', elevation: 1, alignItems: 'center' },
+  pinnedCard: {
+    width: 80,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    overflow: 'hidden',
+    elevation: 1,
+    alignItems: 'center',
+  },
   pinnedImg: { width: 80, height: 60 },
-  pinnedImgPlaceholder: { width: 80, height: 60, backgroundColor: '#ECEFCA', alignItems: 'center', justifyContent: 'center' },
+  pinnedImgPlaceholder: {
+    width: 80,
+    height: 60,
+    backgroundColor: '#ECEFCA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   pinnedName: { fontSize: 11, fontWeight: '600', padding: 4, textAlign: 'center' },
   pinnedBadge: {
-    position: 'absolute', top: 3, right: 3, backgroundColor: 'rgba(0,0,0,0.35)',
-    borderRadius: 8, width: 18, height: 18, alignItems: 'center', justifyContent: 'center',
+    position: 'absolute',
+    top: 3,
+    right: 3,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: 8,
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pinnedStar: { color: '#FBBF24', fontSize: 11 },
   scanFab: {
-    position: 'absolute', bottom: 20, right: 16, width: 52, height: 52,
-    borderRadius: 26, backgroundColor: '#213448', alignItems: 'center',
-    justifyContent: 'center', elevation: 6,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 5,
+    position: 'absolute',
+    bottom: 20,
+    right: 16,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#213448',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
   },
   gridRow: { gap: CARD_GAP, paddingHorizontal: 10 },
   gridContent: { paddingBottom: 80, paddingTop: 4 },
   card: {
-    flex: 1, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden',
-    elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08, shadowRadius: 3, marginBottom: CARD_GAP,
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    marginBottom: CARD_GAP,
   },
   cardImage: { width: '100%', aspectRatio: 1 },
-  cardImagePlaceholder: { backgroundColor: '#ECEFCA', alignItems: 'center', justifyContent: 'center' },
-  cardBody: { padding: 8 },
-  cardName: { fontWeight: '600', marginBottom: 2 },
-  cardPrice: { fontWeight: '700' },
-  cartHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 14, paddingVertical: 4, backgroundColor: '#fff',
-  },
-  cartHeaderTitle: { fontWeight: '700', color: '#213448' },
-  custSection: { paddingHorizontal: 10, paddingVertical: 6 },
-  cartRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#fff', gap: 8,
-  },
-  cartRowLeft: { flex: 1 },
-  cartItemName: { fontWeight: '600', marginBottom: 2 },
-  cartItemPrice: { color: '#666' },
-  discountLabel: { color: '#E05A00' },
-  cartRowRight: { flexDirection: 'row', alignItems: 'center' },
-  qtyBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#ECEFCA', alignItems: 'center', justifyContent: 'center' },
-  qtyBtnText: { fontSize: 18, fontWeight: '700', color: '#213448', lineHeight: 22 },
-  qtyText: { width: 28, textAlign: 'center', fontWeight: '600', fontSize: 15 },
-  deleteBtn: { margin: 0 },
-  swipeDelete: { backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', width: 64 },
-  totalsBox: { padding: 16, backgroundColor: '#FAFAFA', marginTop: 8 },
-  totalsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  totalsLabel: { color: '#555' },
-  totalsValue: { fontWeight: '600' },
-  loyaltyPreview: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, marginBottom: 2 },
-  loyaltyPreviewText: { fontSize: 12, color: '#D97706' },
-  stickyOrder: { paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#E5E7EB' },
-  placeOrderBtn: { borderRadius: 10, backgroundColor: '#547792' },
-  placeOrderContent: { paddingVertical: 6 },
-  center: { alignItems: 'center', justifyContent: 'center', paddingTop: 48 },
-  emptyText: { color: '#888', fontSize: 15, marginTop: 8 },
-  custSearchRow: {
-    flexDirection: 'row', alignItems: 'center', borderWidth: 1,
-    borderColor: '#D1D5DB', borderRadius: 10, backgroundColor: '#fff',
-    paddingHorizontal: 10, gap: 6,
-  },
-  custSearchInput: { flex: 1, height: 40, fontSize: 14, color: '#213448' },
-  dropdown: {
-    backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB',
-    borderRadius: 8, marginTop: 2, elevation: 4,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, zIndex: 10,
-  },
-  dropdownRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
-  dropdownName: { flex: 1, fontWeight: '600', color: '#213448' },
-  pointsBadge: { backgroundColor: '#FEF3C7', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
-  pointsBadgeText: { fontSize: 11, color: '#D97706', fontWeight: '700' },
-  dropdownNew: {
-    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12,
-    paddingVertical: 10, gap: 8, borderTopWidth: 1, borderTopColor: '#F3F4F6',
-  },
-  dropdownNewText: { color: '#2563EB', fontWeight: '600' },
-  memberCard: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF',
-    borderRadius: 10, padding: 10, gap: 10, marginTop: 4,
-  },
-  memberAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#547792', alignItems: 'center', justifyContent: 'center' },
-  memberInitials: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  memberInfo: { flex: 1 },
-  memberName: { fontWeight: '700', color: '#213448' },
-  quickCreateOverlay: { backgroundColor: '#F0F7FF', borderRadius: 10, padding: 12, marginTop: 4, borderWidth: 1, borderColor: '#BFDBFE' },
-  quickCreateCard: {},
-  viewCartBtn: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#213448',
-    marginHorizontal: 10, marginTop: 6, marginBottom: 2,
-    borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, gap: 8,
-  },
-  viewCartText: { flex: 1, color: '#fff', fontWeight: '700', fontSize: 14 },
-  viewCartBadge: { backgroundColor: '#94B4C1', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 1 },
-  viewCartBadgeText: { color: '#fff', fontWeight: '700', fontSize: 12 },
-  viewCartTotal: { color: '#ECEFCA', fontWeight: '700', fontSize: 14 },
-  // Scanner
-  scannerWrapper: { flex: 1, backgroundColor: '#000' },
-  scannerCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  scannerOverlay: {
-    ...StyleSheet.absoluteFillObject,
+  cardImagePlaceholder: {
+    backgroundColor: '#ECEFCA',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scannerFrame: {
-    width: 240,
-    height: 240,
-    borderWidth: 3,
-    borderColor: '#fff',
-    borderRadius: 12,
-  },
-  scannerHint: { color: '#fff', marginTop: 16, fontSize: 14 },
-  // Customer modal
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-  customerModalSheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingBottom: 32,
-    maxHeight: '80%',
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#DDD',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 8,
-  },
-  modalTitle: { fontWeight: '700', textAlign: 'center', marginBottom: 4 },
-  customerRow: {
+  cardBody: { padding: 8 },
+  cardName: { fontWeight: '600', marginBottom: 2 },
+  cardPrice: { fontWeight: '700' },
+  viewCartBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#EEE',
+    backgroundColor: '#213448',
+    marginHorizontal: 10,
+    marginTop: 6,
+    marginBottom: 2,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     gap: 8,
   },
-  customerTierBadge: { backgroundColor: '#EDE7F6' },
+  viewCartText: { flex: 1, color: '#fff', fontWeight: '700', fontSize: 14 },
+  viewCartBadge: {
+    backgroundColor: '#94B4C1',
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 1,
+  },
+  viewCartBadgeText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  viewCartTotal: { color: '#ECEFCA', fontWeight: '700', fontSize: 14 },
+  center: { alignItems: 'center', justifyContent: 'center', paddingTop: 48 },
+  emptyText: { color: '#888', fontSize: 15, marginTop: 8 },
 });
-

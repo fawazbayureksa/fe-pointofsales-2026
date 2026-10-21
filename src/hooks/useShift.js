@@ -10,7 +10,7 @@ export function useCurrentShift() {
     queryKey: [KEY, 'current'],
     queryFn: async () => {
       const result = await getCurrentShift();
-      setShift(result.shift ?? null);
+      setShift(result?.shift ?? null);
       return result;
     },
     onSettled: () => markInitialized(),
@@ -23,7 +23,8 @@ export function useStartShift() {
   const { setShift } = useShiftStore();
   return useMutation({
     mutationFn: startShift,
-    onSuccess: (shift) => {
+    onSuccess: (res) => {
+      const shift = res?.shift ?? res;
       setShift(shift);
       qc.invalidateQueries({ queryKey: [KEY] });
     },

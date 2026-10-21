@@ -4,12 +4,12 @@ import {
   ScrollView,
   StyleSheet,
   Share,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Text,
   Button,
   Divider,
-  ActivityIndicator,
   Snackbar,
   useTheme,
 } from 'react-native-paper';
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   actions: { paddingHorizontal: 16, gap: 10 },
-  actionBtn: { borderRadius: 10, backgroundColor: '#547792' },
-  actionBtnContent: { paddingVertical: 4 },
+  actionBtn: { borderRadius: 10, backgroundColor: '#547792',color: '#fff' },
+  actionBtnContent: { paddingVertical: 4 , color: '#fff'},
   errorText: { color: '#B00020', fontSize: 15 },
 });

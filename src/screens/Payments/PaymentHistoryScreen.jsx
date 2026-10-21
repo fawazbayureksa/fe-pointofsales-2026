@@ -7,10 +7,10 @@ import {
   RefreshControl,
   Modal,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Text,
-  ActivityIndicator,
   Divider,
   useTheme,
   Button,

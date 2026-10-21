@@ -1,6 +1,17 @@
 import client from './client';
 
 /**
+ * Register a new Tenant, admin user, and default outlet (14-day free trial).
+ * Public – No Authorization header required.
+ * @param {import('../types/auth').RegisterData} data
+ * @returns {Promise<import('../types/auth').RegisterResponse>}
+ */
+export async function register(data) {
+  const response = await client.post('/auth/register', data);
+  return response.data;
+}
+
+/**
  * @param {string} email
  * @param {string} password
  * @returns {Promise<import('../types/auth').LoginResponse>}

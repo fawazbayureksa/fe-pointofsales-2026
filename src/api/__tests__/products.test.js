@@ -5,6 +5,7 @@ import {
   updateProduct,
   deleteProduct,
   getCategories,
+  getProductByBarcode,
 } from '../products';
 import client from '../client';
 
@@ -92,5 +93,17 @@ describe('products API – getCategories', () => {
 
     expect(client.get).toHaveBeenCalledWith('/categories', { params: { all: true } });
     expect(result).toEqual(cats);
+  });
+});
+
+describe('products API – getProductByBarcode', () => {
+  it('gets /products/barcode/:barcode and returns unwrapped data', async () => {
+    const product = { id: 1, name: 'Coffee', barcode: '8991234567890' };
+    client.get.mockResolvedValueOnce({ data: { data: product } });
+
+    const result = await getProductByBarcode('8991234567890');
+
+    expect(client.get).toHaveBeenCalledWith('/products/barcode/8991234567890');
+    expect(result).toEqual(product);
   });
 });

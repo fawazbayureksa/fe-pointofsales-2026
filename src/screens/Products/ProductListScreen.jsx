@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Image,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Text,
@@ -12,7 +13,6 @@ import {
   FAB,
   Card,
   Chip,
-  ActivityIndicator,
   Dialog,
   Portal,
   Button,
@@ -20,7 +20,7 @@ import {
   IconButton,
   useTheme,
 } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useProductList, useDeleteProduct } from '../../hooks/useProducts';
 import { useAllCategories } from '../../hooks/useCategories';

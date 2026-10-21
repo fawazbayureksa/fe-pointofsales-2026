@@ -5,16 +5,17 @@ import {
   StyleSheet,
   TouchableOpacity,
   RefreshControl,
+  ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Text,
   Searchbar,
-  ActivityIndicator,
   Divider,
   useTheme,
   Button,
 } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useOrderList } from '../../hooks/useOrders';
 import { formatCurrency } from '../../utils/currency';
 import { formatDate } from '../../utils/date';
@@ -118,32 +119,49 @@ export default function OrdersScreen({ navigation }) {
   return (
     <View style={styles.flex}>
       <Searchbar
-        placeholder="Search orders\u2026"
+        placeholder="Search orders..."
         value={search}
         onChangeText={handleSearchChange}
         style={styles.searchbar}
         elevation={0}
       />
-      <View style={styles.tabRow}>
-        {STATUS_TABS.map((tab) => (
-          <TouchableOpacity
-            key={tab.key}
-            style={[
-              styles.tabBtn,
-              statusFilter === tab.key && { borderBottomColor: theme.colors.primary, borderBottomWidth: 2 },
-            ]}
-            onPress={() => setStatusFilter(tab.key)}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                statusFilter === tab.key && { color: theme.colors.primary, fontWeight: '700' },
-              ]}
-            >
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.tabContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabScrollContent}
+        >
+          {STATUS_TABS.map((tab) => {
+            const isActive = statusFilter === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[
+                  styles.tabBtn,
+                  isActive && {
+                    borderBottomColor: theme.colors.primary,
+                    borderBottomWidth: 2.5,
+                  },
+                ]}
+                onPress={() => setStatusFilter(tab.key)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    isActive && {
+                      color: theme.colors.primary,
+                      fontWeight: '700',
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
       <Divider />
       {isLoading ? (
@@ -191,14 +209,16 @@ export default function OrdersScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  searchbar: { margin: 12, borderRadius: 10 },
-  tabRow: { flexDirection: 'row' },
+  flex: { flex: 1, backgroundColor: '#F4F6F8' },
+  searchbar: { margin: 12, marginBottom: 8, borderRadius: 10, backgroundColor: '#fff' },
+  tabContainer: { backgroundColor: '#fff' },
+  tabScrollContent: { paddingHorizontal: 8 },
   tabBtn: {
-    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 2,
+    justifyContent: 'center',
+    borderBottomWidth: 2.5,
     borderBottomColor: 'transparent',
   },
   tabText: { fontSize: 13, color: '#666', fontWeight: '500' },

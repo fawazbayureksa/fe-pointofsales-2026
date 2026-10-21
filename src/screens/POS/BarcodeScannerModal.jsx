@@ -5,23 +5,36 @@ import {
   StyleSheet,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { getProductByBarcode } from '../../api/products';
 
 /**
  * Props:
  *  visible    {boolean}
  *  products   {Array}    – current product cache for barcode lookup
+ *  outletId   {number}   – active outlet ID for stock verification
  *  onAdd      {(product) => void}
+ *  onScan     {(barcode) => Promise<product>} (optional custom scan resolver)
  *  onDismiss  {() => void}
  */
-export default function BarcodeScannerModal({ visible, products, onAdd, onDismiss }) {
+export default function BarcodeScannerModal({
+  visible,
+  products = [],
+  outletId,
+  onAdd,
+  onScan,
+  onDismiss,
+}) {
   const [permission, requestPermission] = useCameraPermissions();
   const [toast, setToast] = useState(null);
+  const [loading, setLoading] = useState(false);
   const lastScanRef = useRef(null);
+  const isProcessingRef = useRef(false);
   const toastTimerRef = useRef(null);
 
   const showToast = useCallback((msg) => {
@@ -30,33 +43,102 @@ export default function BarcodeScannerModal({ visible, products, onAdd, onDismis
     toastTimerRef.current = setTimeout(() => setToast(null), 2500);
   }, []);
 
+  const handleDismiss = useCallback(() => {
+    lastScanRef.current = null;
+    isProcessingRef.current = false;
+    setLoading(false);
+    setToast(null);
+    onDismiss();
+  }, [onDismiss]);
+
   const handleBarcodeScan = useCallback(
     async ({ data }) => {
-      if (lastScanRef.current === data) return;
-      lastScanRef.current = data;
-      setTimeout(() => {
-        lastScanRef.current = null;
-      }, 2000);
+      const code = String(data ?? '').trim();
+      if (!code || isProcessingRef.current) return;
+      if (lastScanRef.current === code) return;
 
-      const product = products.find((p) => p.barcode === data);
+      lastScanRef.current = code;
+      isProcessingRef.current = true;
 
-      if (!product) {
+      try {
+        const unpaddedCode = code.replace(/^0+/, '');
+
+        // 1. Try local product search first
+        let product = products?.find((p) => {
+          const b = String(p.barcode ?? '').trim();
+          return b && (b === code || (unpaddedCode && b === unpaddedCode));
+        });
+
+        // 2. If not found locally, fetch product by barcode from backend API
+        if (!product) {
+          setLoading(true);
+          try {
+            if (onScan) {
+              product = await onScan(code);
+            } else {
+              product = await getProductByBarcode(code);
+            }
+          } catch (err) {
+            // If code had leading zeros, try unpadded code as fallback
+            if (code !== unpaddedCode && unpaddedCode.length > 0) {
+              try {
+                product = await getProductByBarcode(unpaddedCode);
+              } catch (_) {}
+            }
+          } finally {
+            setLoading(false);
+          }
+        }
+
+        if (!product) {
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          showToast('Product not found');
+          setTimeout(() => {
+            lastScanRef.current = null;
+            isProcessingRef.current = false;
+          }, 2000);
+          return;
+        }
+
+        // 3. Stock validation:
+        // Only consider out of stock when track_stock is true AND stock quantity is known to be <= 0.
+        // If stock is null/undefined (not loaded for outlet or untracked), do not block.
+        let currentStock = null;
+        if (product.stock !== undefined && product.stock !== null) {
+          currentStock = Number(product.stock);
+        } else if (Array.isArray(product.outlets) && outletId) {
+          const matchOutlet = product.outlets.find((o) => o.id === outletId);
+          const outletStock = matchOutlet?.pivot?.stock ?? matchOutlet?.stock;
+          if (outletStock !== undefined && outletStock !== null) {
+            currentStock = Number(outletStock);
+          }
+        }
+
+        if (product.track_stock && currentStock !== null && !isNaN(currentStock) && currentStock <= 0) {
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          showToast('Out of stock');
+          setTimeout(() => {
+            lastScanRef.current = null;
+            isProcessingRef.current = false;
+          }, 2000);
+          return;
+        }
+
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        onAdd(product);
+        handleDismiss();
+      } catch (err) {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        showToast('Product not found');
-        return;
+        showToast(err?.message ?? 'Barcode scan failed');
+        setTimeout(() => {
+          lastScanRef.current = null;
+          isProcessingRef.current = false;
+        }, 2000);
+      } finally {
+        isProcessingRef.current = false;
       }
-
-      if (product.track_stock && (product.stock ?? 0) <= 0) {
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        showToast('Out of stock');
-        return;
-      }
-
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      onAdd(product);
-      onDismiss();
     },
-    [products, onAdd, onDismiss, showToast],
+    [products, outletId, onScan, onAdd, handleDismiss, showToast],
   );
 
   if (!visible) return null;
@@ -75,7 +157,7 @@ export default function BarcodeScannerModal({ visible, products, onAdd, onDismis
   // Permission denied
   if (!permission.granted) {
     return (
-      <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
+      <Modal visible transparent animationType="fade" onRequestClose={handleDismiss}>
         <View style={styles.overlay}>
           <View style={styles.permCard}>
             <MaterialCommunityIcons name="camera-off" size={48} color="#94B4C1" />
@@ -86,7 +168,7 @@ export default function BarcodeScannerModal({ visible, products, onAdd, onDismis
             <TouchableOpacity style={styles.grantBtn} onPress={requestPermission}>
               <Text style={styles.grantBtnText}>Grant Permission</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelBtn} onPress={onDismiss}>
+            <TouchableOpacity style={styles.cancelBtn} onPress={handleDismiss}>
               <Text style={styles.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -96,11 +178,11 @@ export default function BarcodeScannerModal({ visible, products, onAdd, onDismis
   }
 
   return (
-    <Modal visible animationType="slide" onRequestClose={onDismiss}>
+    <Modal visible animationType="slide" onRequestClose={handleDismiss}>
       <SafeAreaView style={styles.root}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onDismiss} style={styles.closeBtn}>
+          <TouchableOpacity onPress={handleDismiss} style={styles.closeBtn}>
             <MaterialCommunityIcons name="close" size={26} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Scan Barcode</Text>
@@ -121,8 +203,15 @@ export default function BarcodeScannerModal({ visible, products, onAdd, onDismis
             <View style={[styles.corner, styles.cornerTR]} />
             <View style={[styles.corner, styles.cornerBL]} />
             <View style={[styles.corner, styles.cornerBR]} />
+            {loading && (
+              <View style={styles.frameLoader}>
+                <ActivityIndicator size="large" color="#fff" />
+              </View>
+            )}
           </View>
-          <Text style={styles.scanHint}>Align barcode within the frame</Text>
+          <Text style={styles.scanHint}>
+            {loading ? 'Looking up product…' : 'Align barcode within the frame'}
+          </Text>
         </View>
 
         {/* Toast */}
@@ -165,6 +254,13 @@ const styles = StyleSheet.create({
     width: FRAME_SIZE,
     height: FRAME_SIZE,
     position: 'relative',
+  },
+  frameLoader: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderRadius: 8,
   },
   corner: {
     position: 'absolute',

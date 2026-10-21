@@ -6,15 +6,15 @@ import {
   TouchableOpacity,
   RefreshControl,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Text,
   Surface,
   useTheme,
-  ActivityIndicator,
   Divider,
 } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BarChart } from 'react-native-chart-kit';
 import { useDashboard } from '../../hooks/useDashboard';
 import { useQueryClient } from '@tanstack/react-query';
@@ -366,7 +366,7 @@ export default function DashboardScreen({ navigation }) {
             return (
               <TouchableOpacity
                 key={`${item.product_id}-${item.outlet_id}`}
-                onPress={() => navigation.navigate('Products', { screen: 'ProductDetail', params: { productId: item.product_id } })}
+                onPress={() => navigation.navigate('Profile', { screen: 'ProductDetail', params: { productId: item.product_id } })}
                 activeOpacity={0.8}
               >
                 <Surface

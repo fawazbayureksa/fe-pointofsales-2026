@@ -5,13 +5,13 @@ import {
   StyleSheet,
   TouchableOpacity,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Text,
   Searchbar,
   FAB,
   Chip,
-  ActivityIndicator,
   Divider,
   useTheme,
   Button,
@@ -28,7 +28,8 @@ const TIER_COLORS = {
 
 function MembershipBadge({ tier }) {
   if (!tier) return null;
-  const c = TIER_COLORS[tier] ?? { bg: '#F5F5F5', text: '#555' };
+  const key = tier.charAt(0).toUpperCase() + tier.slice(1).toLowerCase();
+  const c = TIER_COLORS[key] ?? { bg: '#F5F5F5', text: '#555' };
   return (
     <Chip
       compact
@@ -112,46 +113,48 @@ export default function CustomerListScreen({ navigation }) {
         elevation={0}
       />
 
-      {isLoading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={theme.colors.primary} size="large" />
-        </View>
-      ) : isError ? (
-        <View style={styles.center}>
-          <MaterialCommunityIcons name="alert-circle-outline" size={40} color="#C62828" />
-          <Text style={styles.errorText}>Failed to load customers.</Text>
-          <Button onPress={refetch} style={{ marginTop: 8 }}>Retry</Button>
-        </View>
-      ) : (
-        <FlatList
-          data={customers}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderItem}
-          onEndReached={() => hasNextPage && fetchNextPage()}
-          onEndReachedThreshold={0.4}
-          keyboardShouldPersistTaps="handled"
-          refreshControl={
-            <RefreshControl
-              refreshing={isFetching && !isLoading}
-              onRefresh={refetch}
-              tintColor={theme.colors.primary}
-              colors={[theme.colors.primary]}
-            />
-          }
-          ListFooterComponent={
-            isFetchingNextPage ? (
-              <ActivityIndicator style={{ paddingVertical: 16 }} color={theme.colors.primary} />
-            ) : null
-          }
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <MaterialCommunityIcons name="account-off-outline" size={40} color="#94B4C1" />
-              <Text style={styles.emptyText}>No customers found.</Text>
-            </View>
-          }
-          contentContainerStyle={customers.length === 0 && styles.emptyContainer}
-        />
-      )}
+      <View style={styles.listArea}>
+        {isLoading ? (
+          <View style={styles.center}>
+            <ActivityIndicator color={theme.colors.primary} size="large" />
+          </View>
+        ) : isError ? (
+          <View style={styles.center}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={40} color="#C62828" />
+            <Text style={styles.errorText}>Failed to load customers.</Text>
+            <Button onPress={refetch} style={{ marginTop: 8 }}>Retry</Button>
+          </View>
+        ) : (
+          <FlatList
+            data={customers}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={renderItem}
+            onEndReached={() => hasNextPage && fetchNextPage()}
+            onEndReachedThreshold={0.4}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={
+              <RefreshControl
+                refreshing={isFetching && !isLoading}
+                onRefresh={refetch}
+                tintColor={theme.colors.primary}
+                colors={[theme.colors.primary]}
+              />
+            }
+            ListFooterComponent={
+              isFetchingNextPage ? (
+                <ActivityIndicator style={{ paddingVertical: 16 }} color={theme.colors.primary} />
+              ) : null
+            }
+            ListEmptyComponent={
+              <View style={styles.center}>
+                <MaterialCommunityIcons name="account-off-outline" size={40} color="#94B4C1" />
+                <Text style={styles.emptyText}>No customers found.</Text>
+              </View>
+            }
+            contentContainerStyle={customers.length === 0 ? styles.emptyContainer : undefined}
+          />
+        )}
+      </View>
 
       <FAB
         icon="plus"
@@ -165,6 +168,7 @@ export default function CustomerListScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  listArea: { flex: 1, overflow: 'hidden' },
   searchbar: { margin: 12, borderRadius: 10 },
   row: { backgroundColor: '#fff' },
   rowMain: {
