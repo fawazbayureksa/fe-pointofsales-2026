@@ -195,6 +195,8 @@ export default function POSScreen({ navigation }) {
   const maxLoyalty = Math.min(selectedCustomer?.loyalty_points ?? 0, subtotal - discountValue);
   const loyaltyRedeemed = useLoyalty && selectedCustomer ? Math.min(loyaltyPoints, maxLoyalty) : 0;
 
+  const activeOutletId = shift?.outlet_id ?? shift?.outlet?.id ?? outletId;
+
   const {
     data: prodData,
     fetchNextPage,
@@ -206,6 +208,7 @@ export default function POSScreen({ navigation }) {
   } = useProductList({
     search: appliedSearch || undefined,
     category: selectedCategory ?? undefined,
+    outlet_id: activeOutletId || undefined,
     is_active: true,
   });
   const products = prodData?.pages.flatMap((p) => p.data ?? []) ?? [];
@@ -261,20 +264,61 @@ export default function POSScreen({ navigation }) {
     async (barcode) => {
       setScanLoading(true);
       try {
-        const product = await getProductByBarcode(barcode);
-        handleAddProduct(product);
+        const code = String(barcode || '').trim();
+        const unpaddedCode = code.replace(/^0+/, '');
+
+        let product = products.find((p) => {
+          const b = String(p.barcode || '').trim();
+          return b && (b === code || (unpaddedCode && b === unpaddedCode));
+        });
+
+        if (!product) {
+          try {
+            product = await getProductByBarcode(code);
+          } catch (err) {
+            if (code !== unpaddedCode && unpaddedCode.length > 0) {
+              product = await getProductByBarcode(unpaddedCode);
+            } else {
+              throw err;
+            }
+          }
+        }
+
+        if (!product) {
+          setSnackbar({ visible: true, message: `Product not found for barcode ${barcode}.` });
+          return;
+        }
+
+        let currentStock = null;
+        if (product.stock !== undefined && product.stock !== null) {
+          currentStock = Number(product.stock);
+        } else if (Array.isArray(product.outlets) && activeOutletId) {
+          const matchOutlet = product.outlets.find((o) => o.id === activeOutletId);
+          const outletStock = matchOutlet?.pivot?.stock ?? matchOutlet?.stock;
+          if (outletStock !== undefined && outletStock !== null) {
+            currentStock = Number(outletStock);
+          }
+        }
+
+        if (product.track_stock && currentStock !== null && !isNaN(currentStock) && currentStock <= 0) {
+          setSnackbar({ visible: true, message: `${product.name} is out of stock.` });
+          return;
+        }
+
+        return product;
       } catch (err) {
-        const status = err?.status;
+        const status = err?.status ?? err?.response?.status;
         if (status === 404) {
           setSnackbar({ visible: true, message: `Product not found for barcode ${barcode}.` });
         } else {
           setSnackbar({ visible: true, message: err?.message ?? 'Barcode scan failed.' });
         }
+        throw err;
       } finally {
         setScanLoading(false);
       }
     },
-    [handleAddProduct],
+    [products, activeOutletId],
   );
 
   const handleSelectCustomer = useCallback(
@@ -568,7 +612,9 @@ export default function POSScreen({ navigation }) {
       <BarcodeScannerModal
         visible={scannerVisible}
         products={products}
+        outletId={activeOutletId}
         onAdd={handleAddProduct}
+        onScan={handleBarcodeScan}
         onDismiss={() => setScannerVisible(false)}
       />
 

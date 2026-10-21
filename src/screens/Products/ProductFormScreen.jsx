@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   View,
   ScrollView,
@@ -7,6 +7,7 @@ import {
   Image,
   TouchableOpacity,
   Platform,
+  SafeAreaView,
 } from 'react-native';
 import {
   Text,
@@ -45,10 +46,16 @@ const INITIAL_FORM = {
 };
 
 function FieldError({ errors, field }) {
-  const msg = errors?.[field];
-  if (!msg) return null;
-  const text = Array.isArray(msg) ? msg[0] : msg;
-  return <Text style={styles.errorText}>{text}</Text>;
+  if (!errors) return null;
+  const fields = Array.isArray(field) ? field : [field];
+  for (const f of fields) {
+    const msg = errors[f];
+    if (msg) {
+      const text = Array.isArray(msg) ? msg[0] : msg;
+      return <Text style={styles.errorText}>{text}</Text>;
+    }
+  }
+  return null;
 }
 
 function FormTextInput({ label, field, form, onChange, errors, ...rest }) {
@@ -99,6 +106,7 @@ export default function ProductFormScreen({ route, navigation }) {
   // localImageUri: newly picked image (local file URI)
   // existingImageUrl: image already on the server (for edit mode)
   const [localImageUri, setLocalImageUri] = useState(null);
+  const [selectedAsset, setSelectedAsset] = useState(null);
   const existingImageUrl = isEdit ? (editingProduct.image ?? null) : null;
 
   const pickImage = async (fromCamera) => {
@@ -125,8 +133,20 @@ export default function ProductFormScreen({ route, navigation }) {
           quality: 0.8,
         });
 
-    if (!result.canceled) {
-      setLocalImageUri(result.assets[0].uri);
+    if (!result.canceled && result.assets?.[0]) {
+      const asset = result.assets[0];
+      // Backend validation: 'image' => ['nullable', 'image', 'mimes:jpeg,png,webp', 'max:2048'] (2048 KB = 2 MB)
+      if (asset.fileSize && asset.fileSize > 2048 * 1024) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          image: ['The image field must not be greater than 2048 kilobytes (2MB).'],
+        }));
+        setSnackbar({ visible: true, message: 'Image size must not exceed 2MB.' });
+        return;
+      }
+      setSelectedAsset(asset);
+      setLocalImageUri(asset.uri);
+      setFieldErrors((prev) => ({ ...prev, image: undefined }));
     }
   };
 
@@ -155,8 +175,10 @@ export default function ProductFormScreen({ route, navigation }) {
   // ── Barcode scanner ──────────────────────────────────────────────────────────
   const [permission, requestPermission] = useCameraPermissions();
   const [scannerVisible, setScannerVisible] = useState(false);
+  const hasScannedRef = useRef(false);
 
   const openScanner = async () => {
+    hasScannedRef.current = false;
     if (!permission?.granted) {
       const result = await requestPermission();
       if (!result.granted) {
@@ -167,8 +189,16 @@ export default function ProductFormScreen({ route, navigation }) {
     setScannerVisible(true);
   };
 
+  const closeScanner = () => {
+    hasScannedRef.current = false;
+    setScannerVisible(false);
+  };
+
   const handleBarcodeScanned = ({ data }) => {
-    handleChange('barcode', data);
+    if (hasScannedRef.current) return;
+    hasScannedRef.current = true;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    handleChange('barcode', String(data ?? '').trim());
     setScannerVisible(false);
   };
 
@@ -180,8 +210,67 @@ export default function ProductFormScreen({ route, navigation }) {
   const handleSubmit = async () => {
     setFieldErrors({});
 
-    if (!form.name.trim()) {
-      setFieldErrors({ name: ['Name is required.'] });
+    const clientErrors = {};
+
+    // 1. name: ['required', 'string', 'max:255']
+    if (!form.name || !form.name.trim()) {
+      clientErrors.name = ['Name is required.'];
+    } else if (form.name.trim().length > 255) {
+      clientErrors.name = ['Name may not be greater than 255 characters.'];
+    }
+
+    // 2. price: ['required', 'numeric', 'min:0']
+    if (form.price === '' || form.price == null) {
+      clientErrors.price = ['Price is required.'];
+    } else {
+      const p = Number(form.price);
+      if (isNaN(p)) {
+        clientErrors.price = ['Price must be a valid number.'];
+      } else if (p < 0) {
+        clientErrors.price = ['Price must be at least 0.'];
+      }
+    }
+
+    // 3. cost_price: ['nullable', 'numeric', 'min:0']
+    if (form.cost_price !== '' && form.cost_price != null) {
+      const cp = Number(form.cost_price);
+      if (isNaN(cp)) {
+        clientErrors.cost_price = ['Cost price must be a valid number.'];
+      } else if (cp < 0) {
+        clientErrors.cost_price = ['Cost price must be at least 0.'];
+      }
+    }
+
+    // 4. stock: ['nullable', 'numeric', 'min:0']
+    if (form.stock !== '' && form.stock != null) {
+      const s = Number(form.stock);
+      if (isNaN(s)) {
+        clientErrors.stock = ['Stock must be a valid number.'];
+      } else if (s < 0) {
+        clientErrors.stock = ['Stock must be at least 0.'];
+      }
+    }
+
+    // 5. low_stock_threshold: ['nullable', 'numeric', 'min:0']
+    if (form.low_stock_threshold !== '' && form.low_stock_threshold != null) {
+      const lst = Number(form.low_stock_threshold);
+      if (isNaN(lst)) {
+        clientErrors.low_stock_threshold = ['Low stock threshold must be a valid number.'];
+      } else if (lst < 0) {
+        clientErrors.low_stock_threshold = ['Low stock threshold must be at least 0.'];
+      }
+    }
+
+    // 6. image: ['nullable', 'image', 'mimes:jpeg,png,webp', 'max:2048']
+    if (selectedAsset?.fileSize && selectedAsset.fileSize > 2048 * 1024) {
+      clientErrors.image = ['The image field must not be greater than 2048 kilobytes (2MB).'];
+    }
+
+    if (Object.keys(clientErrors).length > 0) {
+      setFieldErrors(clientErrors);
+      const firstKey = Object.keys(clientErrors)[0];
+      const firstMsg = clientErrors[firstKey][0];
+      setSnackbar({ visible: true, message: firstMsg || 'Please correct the validation errors.' });
       return;
     }
 
@@ -189,33 +278,31 @@ export default function ProductFormScreen({ route, navigation }) {
       if (isEdit) {
         const payload = {
           name:                form.name.trim()               || undefined,
-          price:               form.price                     ? parseFloat(form.price)                     : undefined,
-          cost_price:          form.cost_price                ? parseFloat(form.cost_price)                : undefined,
+          price:               form.price !== ''              ? parseFloat(form.price)                     : undefined,
+          cost_price:          form.cost_price !== ''         ? parseFloat(form.cost_price)                : undefined,
           stock:               form.stock !== ''              ? parseFloat(form.stock)                     : undefined,
           low_stock_threshold: form.low_stock_threshold !== '' ? parseFloat(form.low_stock_threshold)      : undefined,
           category:            form.category                  || undefined,
+          category_id:         form.category_id               ? form.category_id                           : undefined,
           is_active:           form.is_active,
           ...(localImageUri ? { image: localImageUri } : {}),
         };
         await updateMutation.mutateAsync({ id: editingProduct.id, data: payload });
       } else {
-        if (!form.price) {
-          setFieldErrors({ price: ['Price is required.'] });
-          return;
-        }
         const payload = {
           name:                form.name.trim(),
           sku:                 form.sku.trim()                || undefined,
           barcode:             form.barcode.trim()            || undefined,
           description:         form.description.trim()        || undefined,
           price:               parseFloat(form.price),
-          cost_price:          form.cost_price                ? parseFloat(form.cost_price)                : undefined,
+          cost_price:          form.cost_price !== ''         ? parseFloat(form.cost_price)                : undefined,
           stock:               form.stock !== ''              ? parseFloat(form.stock)                     : undefined,
           low_stock_threshold: form.low_stock_threshold !== '' ? parseFloat(form.low_stock_threshold)      : undefined,
           unit:                form.unit.trim()               || undefined,
           category:            form.category                  || undefined,
+          category_id:         form.category_id               ? form.category_id                           : undefined,
           outlet_id:           form.outlet_id                 ? form.outlet_id                             : undefined,
-          track_stock:         form.track_stock,
+          track_stock:         form.track_stock ? 'true' : 'false',
           is_active:           form.is_active,
           ...(localImageUri ? { image: localImageUri } : {}),
         };
@@ -223,8 +310,17 @@ export default function ProductFormScreen({ route, navigation }) {
       }
       navigation.goBack();
     } catch (err) {
-      if (err?.errors) {
-        setFieldErrors(err.errors);
+      const beErrors = err?.errors ?? err?.response?.data?.errors;
+      if (beErrors && Object.keys(beErrors).length > 0) {
+        setFieldErrors(beErrors);
+        const firstKey = Object.keys(beErrors)[0];
+        const firstMsg = Array.isArray(beErrors[firstKey])
+          ? beErrors[firstKey][0]
+          : beErrors[firstKey];
+        setSnackbar({
+          visible: true,
+          message: firstMsg || err?.message || 'Please check the form for errors.',
+        });
       } else {
         setSnackbar({ visible: true, message: err?.message ?? 'Save failed.' });
       }
@@ -318,7 +414,7 @@ export default function ProductFormScreen({ route, navigation }) {
               Upload Product Photo
             </Text>
             <Text variant="bodySmall" style={styles.imageUploadSubtitle}>
-              Tap to take a photo or select from your gallery
+              Tap to take photo or choose from gallery (JPEG, PNG, WEBP, max 2MB)
             </Text>
 
             <View style={styles.imageUploadPillsRow}>
@@ -333,6 +429,7 @@ export default function ProductFormScreen({ route, navigation }) {
             </View>
           </TouchableOpacity>
         )}
+        <FieldError errors={fieldErrors} field="image" />
 
         <Text variant="titleLarge" style={[styles.sectionTitle, { marginTop: 16 }]}>
           Basic Info
@@ -345,6 +442,8 @@ export default function ProductFormScreen({ route, navigation }) {
           form={form}
           onChange={handleChange}
           errors={fieldErrors}
+          maxLength={255}
+          placeholder="Product name (max 255 chars)"
         />
 
         {!isEdit && (
@@ -404,6 +503,7 @@ export default function ProductFormScreen({ route, navigation }) {
           onChange={handleChange}
           errors={fieldErrors}
           keyboardType="decimal-pad"
+          placeholder="0 (min: 0)"
         />
         <FormTextInput
           label="Cost Price"
@@ -412,6 +512,7 @@ export default function ProductFormScreen({ route, navigation }) {
           onChange={handleChange}
           errors={fieldErrors}
           keyboardType="decimal-pad"
+          placeholder="0 (min: 0)"
         />
 
         <Text variant="titleLarge" style={[styles.sectionTitle, { marginTop: 16 }]}>
@@ -449,10 +550,10 @@ export default function ProductFormScreen({ route, navigation }) {
                   <TextInput.Icon icon="chevron-down" color="#547792" />
                 )
               }
-              error={!!fieldErrors?.category}
+              error={!!fieldErrors?.category || !!fieldErrors?.category_id}
             />
           </TouchableOpacity>
-          <FieldError errors={fieldErrors} field="category" />
+          <FieldError errors={fieldErrors} field={['category', 'category_id']} />
         </View>
 
         {!isEdit && (
@@ -477,6 +578,7 @@ export default function ProductFormScreen({ route, navigation }) {
           onChange={handleChange}
           errors={fieldErrors}
           keyboardType="numeric"
+          placeholder="0 (min: 0)"
         />
         <FormTextInput
           label="Low Stock Threshold"
@@ -485,6 +587,7 @@ export default function ProductFormScreen({ route, navigation }) {
           onChange={handleChange}
           errors={fieldErrors}
           keyboardType="numeric"
+          placeholder="0 (min: 0)"
         />
         {!isEdit && (
           <View style={styles.outletFieldContainer}>
@@ -533,13 +636,16 @@ export default function ProductFormScreen({ route, navigation }) {
         <Divider style={styles.divider} />
 
         {!isEdit && (
-          <View style={styles.switchRow}>
-            <Text variant="bodyMedium">Track Stock</Text>
-            <Switch
-              value={form.track_stock}
-              onValueChange={(v) => handleChange('track_stock', v)}
-            />
-          </View>
+          <>
+            <View style={styles.switchRow}>
+              <Text variant="bodyMedium">Track Stock</Text>
+              <Switch
+                value={form.track_stock}
+                onValueChange={(v) => handleChange('track_stock', v)}
+              />
+            </View>
+            <FieldError errors={fieldErrors} field="track_stock" />
+          </>
         )}
 
         <View style={styles.switchRow}>
@@ -701,30 +807,72 @@ export default function ProductFormScreen({ route, navigation }) {
       </RNModal>
 
       {/* ── Barcode scanner modal ─────────────────────────────────────────────── */}
-      <RNModal
-        visible={scannerVisible}
-        animationType="slide"
-        onRequestClose={() => setScannerVisible(false)}
-      >
-        <View style={styles.scannerContainer}>
-          <CameraView
-            style={StyleSheet.absoluteFillObject}
-            facing="back"
-            barcodeScannerSettings={{ barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e'] }}
-            onBarcodeScanned={handleBarcodeScanned}
-          />
-          <View style={styles.scannerOverlay}>
-            <Text style={styles.scannerHint}>Aim at a barcode to scan</Text>
-            <Button
-              mode="contained"
-              onPress={() => setScannerVisible(false)}
-              style={styles.scannerClose}
-            >
-              Cancel
-            </Button>
-          </View>
-        </View>
-      </RNModal>
+      {scannerVisible && (
+        <RNModal
+          visible={scannerVisible}
+          animationType="slide"
+          onRequestClose={closeScanner}
+        >
+          <SafeAreaView style={styles.scannerRoot}>
+            {/* Header */}
+            <View style={styles.scannerHeader}>
+              <TouchableOpacity onPress={closeScanner} style={styles.scannerCloseBtn}>
+                <MaterialCommunityIcons name="close" size={26} color="#fff" />
+              </TouchableOpacity>
+              <Text style={styles.scannerHeaderTitle}>Scan Barcode</Text>
+              <View style={{ width: 40 }} />
+            </View>
+
+            {!permission?.granted ? (
+              <View style={styles.permOverlay}>
+                <View style={styles.permCard}>
+                  <MaterialCommunityIcons name="camera-off" size={48} color="#94B4C1" />
+                  <Text style={styles.permTitle}>Camera Access Needed</Text>
+                  <Text style={styles.permBody}>
+                    Grant camera access to scan barcodes into the form.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.grantBtn}
+                    onPress={async () => {
+                      const res = await requestPermission();
+                      if (!res.granted) {
+                        setSnackbar({ visible: true, message: 'Camera permission denied.' });
+                      }
+                    }}
+                  >
+                    <Text style={styles.grantBtnText}>Grant Permission</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={closeScanner}>
+                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <>
+                <CameraView
+                  style={StyleSheet.absoluteFill}
+                  facing="back"
+                  barcodeScannerSettings={{
+                    barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e'],
+                  }}
+                  onBarcodeScanned={handleBarcodeScanned}
+                />
+
+                {/* Scan frame overlay */}
+                <View style={styles.scanFrame} pointerEvents="none">
+                  <View style={styles.frame}>
+                    <View style={[styles.corner, styles.cornerTL]} />
+                    <View style={[styles.corner, styles.cornerTR]} />
+                    <View style={[styles.corner, styles.cornerBL]} />
+                    <View style={[styles.corner, styles.cornerBR]} />
+                  </View>
+                  <Text style={styles.scanHint}>Align barcode within the frame</Text>
+                </View>
+              </>
+            )}
+          </SafeAreaView>
+        </RNModal>
+      )}
 
       <Snackbar
         visible={snackbar.visible}
@@ -736,6 +884,10 @@ export default function ProductFormScreen({ route, navigation }) {
     </View>
   );
 }
+
+const FRAME_SIZE = 240;
+const CORNER_LEN = 28;
+const CORNER_W = 4;
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
@@ -973,22 +1125,71 @@ const styles = StyleSheet.create({
     borderColor: '#CBD5E1',
   },
   // Barcode scanner
-  scannerContainer: { flex: 1, backgroundColor: '#000' },
-  scannerOverlay: {
-    position: 'absolute',
-    bottom: 48,
-    left: 0,
-    right: 0,
+  scannerRoot: { flex: 1, backgroundColor: '#000' },
+  scannerHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-  },
-  scannerHint: {
-    color: '#fff',
-    fontSize: 16,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingTop: 8,
+    paddingBottom: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    zIndex: 10,
   },
-  scannerClose: { paddingHorizontal: 24 },
+  scannerCloseBtn: { padding: 6 },
+  scannerHeaderTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  scanFrame: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  frame: {
+    width: FRAME_SIZE,
+    height: FRAME_SIZE,
+    position: 'relative',
+  },
+  corner: {
+    position: 'absolute',
+    width: CORNER_LEN,
+    height: CORNER_LEN,
+    borderColor: '#fff',
+  },
+  cornerTL: { top: 0, left: 0, borderTopWidth: CORNER_W, borderLeftWidth: CORNER_W },
+  cornerTR: { top: 0, right: 0, borderTopWidth: CORNER_W, borderRightWidth: CORNER_W },
+  cornerBL: { bottom: 0, left: 0, borderBottomWidth: CORNER_W, borderLeftWidth: CORNER_W },
+  cornerBR: { bottom: 0, right: 0, borderBottomWidth: CORNER_W, borderRightWidth: CORNER_W },
+  scanHint: {
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 20,
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  permOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  permCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 28,
+    margin: 32,
+    alignItems: 'center',
+    gap: 8,
+  },
+  permTitle: { fontSize: 17, fontWeight: '700', color: '#213448', marginTop: 8 },
+  permBody: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 8 },
+  grantBtn: {
+    backgroundColor: '#547792',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    marginTop: 8,
+    width: '100%',
+    alignItems: 'center',
+  },
+  grantBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  cancelBtn: { paddingVertical: 10, marginTop: 4 },
+  cancelBtnText: { color: '#547792', fontWeight: '600', fontSize: 14 },
 });

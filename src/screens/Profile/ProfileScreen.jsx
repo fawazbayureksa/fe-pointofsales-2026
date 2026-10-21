@@ -20,10 +20,11 @@ import useAuth from '../../hooks/useAuth';
 
 /** Role → { bg, text, border, icon } configuration map */
 const ROLE_CONFIG = {
-  admin:   { bg: '#FEE2E2', text: '#B91C1C', border: '#FECACA', icon: 'shield-account' },
-  cashier: { bg: '#E0F2FE', text: '#0369A1', border: '#BAE6FD', icon: 'cash-register' },
-  manager: { bg: '#DCFCE7', text: '#15803D', border: '#BBF7D0', icon: 'account-tie' },
-  owner:   { bg: '#FEF3C7', text: '#B45309', border: '#FDE68A', icon: 'crown' },
+  admin:        { bg: '#FEE2E2', text: '#B91C1C', border: '#FECACA', icon: 'shield-account' },
+  tenant_admin: { bg: '#EDE9FE', text: '#6D28D9', border: '#DDD6FE', icon: 'shield-crown' },
+  cashier:      { bg: '#E0F2FE', text: '#0369A1', border: '#BAE6FD', icon: 'cash-register' },
+  manager:      { bg: '#DCFCE7', text: '#15803D', border: '#BBF7D0', icon: 'account-tie' },
+  owner:        { bg: '#FEF3C7', text: '#B45309', border: '#FDE68A', icon: 'crown' },
 };
 const ROLE_COLORS = ROLE_CONFIG;
 
